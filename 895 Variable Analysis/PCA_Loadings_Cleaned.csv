@@ -1,0 +1,80 @@
+,Description,Answer Categories,Type,PC1,PC2,PC3,PC4,PC5
+V148_1,Do you believe in God? Yes,2,Binary ,NA,-0.121,0.127,NA,NA
+V149_1,Do you believe in Hell? Yes,2,Binary ,NA,NA,0.129,NA,NA
+V149_2,Do you believe in Hell? No,2,Binary ,0.12,NA,NA,NA,NA
+V13_1,"Here is a list of qualities that children can be encouraged to learn at home. Which, if any, do you consider to be especially important?:
+Hard work, mentioned",2,"Binary? 
+Mention or Not mention from a list",NA,NA,0.121,NA,NA
+V13_2,"Here is a list of qualities that children can be encouraged to learn at home. Which, if any, do you consider to be especially important?:
+Hard work,  not mentioned",2,"Binary? 
+Mention or Not mention from a list",NA,NA,-0.121,NA,NA
+V146_1,"Apart from weddings and funerals, about how often do you pray? Several times a day",8,Categorical,-0.116,NA,NA,0.137,NA
+V147_1,"Independently of whether you attend religious services or not, would you say you are: a religious person",3,Categorical,NA,-0.105,NA,NA,NA
+V150_2,"With which one of the following statements do you agree most?
+The basic meaning of religion is:""To do good to other people""",4,Categorical,NA,NA,NA,-0.108,NA
+V151_2,"And with which of the following statements do you agree most?
+The basic meaning of religion is: ""To make sense of life in this world""",4,Categorical,NA,NA,NA,-0.117,NA
+V109_1,"I am going to name a number of organizations. For each one, could you tell me how much confidence you have in them: is it a great deal of confidence, quite a lot of confidence, not very much confidence or none at all?:
+The armed forces - a great deal ",4,"Categorical, directionality",NA,NA,NA,NA,0.109
+V116_2,"I am going to name a number of organizations. For each one, could you tell me how much confidence you have in them: is it a great deal of confidence, quite a lot of confidence, not very much confidence or none at all?:
+Political parties - quite a lot",4,"Categorical, directionality",NA,NA,0.101,NA,NA
+V116_4,"I am going to name a number of organizations. For each one, could you tell me how much confidence you have in them: is it a great deal of confidence, quite a lot of confidence, not very much confidence or none at all?:
+Political parties - none at all",4,"Categorical, directionality",NA,NA,-0.107,NA,NA
+V118_2,"I am going to name a number of organizations. For each one, could you tell me how much confidence you have in them: is it a great deal of confidence, quite a lot of confidence, not very much confidence or none at all?:
+The Civil service - quite a lot",4,"Categorical, directionality",NA,NA,0.102,NA,NA
+V130_1,"Many things are desirable, but not all of them are essential characteristics of democracy. Please tell me for each of the following things how essential you think it is as a characteristic of democracy. Use this scale where 1 means “not at all an essential characteristic of democracy” and 10 means it definitely is “an essential characteristic of democracy”:
+Governments tax the rich and subsidize the poor - not an essential characteristic of democracy",10,Likert - ordinal ,NA,NA,NA,NA,0.11
+V153_1,"Please tell us if you strongly agree, agree, disagree, or strongly disagree with the following statements:
+""Whenever science and religion conflict,  religion is always right"" Strongly agree",4,"Cateorical, directionality",-0.112,NA,NA,0.123,NA
+V154_1,"Please tell us if you strongly agree, agree, disagree, or strongly disagree with the following statements:  ""The only acceptable religion  is my religion"" strongly agree",4,"Cateorical, directionality",-0.109,NA,-0.1,NA,NA
+V160_ Very High,,,,NA,NA,NA,-0.103,NA
+V166_4,,,,NA,NA,NA,-0.144,NA
+V170_1,,,,NA,NA,NA,NA,0.116
+V171_4,,,,NA,0.101,NA,NA,0.115
+V176_1,,,,NA,NA,0.115,NA,NA
+V176_5,,,,NA,NA,-0.107,NA,NA
+V177_1,,,,NA,NA,0.108,NA,NA
+V177_5,,,,NA,NA,-0.103,NA,NA
+V185_4,,,,NA,NA,NA,NA,0.112
+V187_1,,,,NA,NA,NA,0.119,NA
+V187_2,,,,NA,NA,NA,-0.124,NA
+V189_4,,,,NA,0.11,NA,NA,0.104
+V19_1,"Here is a list of qualities that children can be encouraged to learn at home. Which, if any, do you consider to be especially important?:
+Religious faith, mentioned",2,"Binary? 
+Mention or Not mention from a list",-0.121,NA,NA,NA,NA
+V19_2,"Here is a list of qualities that children can be encouraged to learn at home. Which, if any, do you consider to be especially important?:
+Religious faith, not mentioned",2,"Binary? 
+Mention or Not mention from a list",0.121,NA,NA,NA,NA
+V191_4,,,,NA,NA,-0.107,NA,NA
+V198_Very Low,,,,NA,NA,NA,NA,0.125
+V203_Very Low,,,,-0.137,NA,NA,NA,NA
+V204_Very Low,,,,-0.115,NA,NA,NA,NA
+V205_Very Low,,,,-0.101,NA,NA,NA,NA
+V206_Very Low,,,,-0.1,NA,0.104,NA,0.149
+V207_Very Low,,,,NA,NA,-0.105,NA,-0.152
+V209_Very Low,,,,NA,NA,NA,-0.11,NA
+V214_1,,,,NA,NA,NA,NA,0.105
+V214_2,,,,NA,NA,NA,NA,-0.115
+V219_1,,,,NA,NA,NA,-0.103,NA
+V243_2,,,,NA,NA,NA,NA,0.106
+V244_2,,,,NA,NA,NA,NA,0.104
+V245_1,,,,NA,-0.113,NA,-0.111,0.111
+V246_1,,,,NA,NA,NA,-0.116,0.134
+V25_0,,,,NA,0.203,-0.106,NA,NA
+V25_2,,,,NA,-0.137,NA,NA,NA
+V38_1,,,,NA,0.173,NA,NA,NA
+V38_2,,,,NA,-0.203,NA,NA,NA
+V40_1,,,,-0.121,NA,NA,NA,NA
+V40_2,,,,0.107,-0.126,NA,NA,NA
+V42_2,,,,NA,-0.103,NA,NA,NA
+V43_1,,,,-0.112,0.106,NA,NA,NA
+V43_2,,,,0.112,-0.106,NA,NA,NA
+V45_1,,,,-0.111,NA,NA,NA,NA
+V45_3,,,,NA,-0.119,NA,NA,NA
+V46_1,,,,NA,NA,0.105,-0.125,NA
+V49_1,,,,-0.131,NA,NA,NA,NA
+V85_3,,,,-0.103,NA,NA,NA,NA
+V86_3,,,,NA,NA,NA,-0.115,-0.106
+V88_3,,,,NA,NA,NA,NA,-0.101
+V9_1,,,,-0.163,NA,NA,NA,NA
+V95_Dont Know,,,,NA,NA,-0.11,NA,NA
