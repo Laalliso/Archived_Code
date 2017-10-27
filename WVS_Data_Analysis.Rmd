@@ -1386,8 +1386,9 @@ WVS_Data_Precentages3<- WVS_Data_Precentages2[, -grep("Neg1", colnames(WVS_Data_
 #write.csv(WVS_Data_Precentages, file = "WVS_Data_Percentages.csv")
 ```
 
-### Variance of Different Numbers of Categories
-```{r}
+### Variance of all Variables
+Since the WVS has a variety of different question types, we wanted to look at the variance to determine if a specific type of question would mathematically appear in the components due to the structure of the question. Primarily we were concerned about questions which asked a yes or no question and those that asked a respondant to list 5 attributes they consider important and the  variables were coded as mentioned or not mentioned. We first looked at the variance of all the variables, then the two category responses (yes or no), then the lists (mention or not mentioned).
+```{r All variables}
 Variances <- c()
 for(i in 1:895){
   Question_Variance <- var(WVS_Data_Precentages3[,i])
@@ -1402,7 +1403,7 @@ barplot(Variances)
 #dev.off()
 ```
 
-```{r}
+```{r Two Catergory Y/N Questions}
 #Break into two groups - Questions with 2 answers and those with more than 2 answers. 
 #Two answer questions: 12-22, 24, 36-44, 66, 82, 83, 148, 149, 150, 151, 176, 177, 178, 179, 180, 234, 235, 236, 240, 243, 244, 245,246, 250, 252
 
@@ -1437,7 +1438,7 @@ barplot(Variances_TwoCategory)
 dev.off()
 ```
 
-```{r}
+```{r Mention-Not Mention Questions}
 MentionQuestions<- WVS_Data_Precentages3[,c("V12_1", "V12_2",
                                                        "V13_1", "V13_2",
                                                        "V14_1", "V14_2",
@@ -1472,7 +1473,7 @@ barplot(Variances_Mention)
 dev.off()
 
 ```
-```{r}
+```{r Questions with 3 or more response categories}
 remove <- c(colnames(TwoCategoryQuestions), colnames(MentionQuestions))
 MultipleCat_Questions<- WVS_Data_Precentages3[,!colnames(WVS_Data_Precentages3) %in% remove]
 
@@ -1491,6 +1492,8 @@ hist(Variances_MultipleCat)
 barplot(Variances_MultipleCat)
 dev.off()
 ```
+
+For these plots, we decided to remove the "no" and "not_mention" variables from the principle component analysis because the variance will load in equal but opposite directions and could mask other relationships.
 ```{r}
 BinaryQuestions_RemoveVarible <- colnames(WVS_Data_Precentages3[,c("V12_2","V13_2", "V14_2", "V15_2", 
                                                        "V16_2", "V17_2", "V18_2", 
@@ -1507,10 +1510,6 @@ BinaryQuestions_RemoveVarible <- colnames(WVS_Data_Precentages3[,c("V12_2","V13_
                                     
 WVS_Data_Precentages4 <- WVS_Data_Precentages3[,!colnames(WVS_Data_Precentages3) %in% BinaryQuestions_RemoveVarible] 
 ```
-
-
-
-
 
 #Prinicple Component Analysis
 The goal of principle component analysis is to reduce a set of correlated variables to a smaller number of uncorrelated varaibles.The goal is create a new set of varaibles that accounts for as much variability as possible. These principle components are linear combinations of the previous variables.Therefore, each component has a loading from the variables it is made up of.  
@@ -1730,40 +1729,3 @@ summary(fullregression)
 ```{r}
 plot(fullregression)
 ```
-
-#Check Assumptions
-```{r}
-#Check normality of Principle Components
-y <- Data_Control$RE_Generation
-PC1 <- Data_Control$PC1
-PC2 <- Data_Control$PC2
-PC3 <- Data_Control$PC3
-PC4 <- Data_Control$PC4
-PC5 <- Data_Control$PC5
-
-hist(PC1)
-hist(PC2)
-```
-
-#Non Linear Regression
-```{r eval=FALSE}
-fit_5 <- nls(y ~ a^PC1 + b^PC2 + d^PC3 + e^PC4 + f^PC5 + g^(Control))
-#letter c is a function of some type....
-```
-```{r eval=FALSE}
-fit_4 <- nls(y ~ a^PC1 + b^PC2 + d^PC3 + e^PC4 + g^(Control))
-#letter c is a function of some type....
-cor(y, predict(fit_4))
-summary(fit_4)
-```
-
-With only the first 2 components
-```{r}
-fit_2 <- nls(y ~ a^PC1 + b^PC2 + g^(Control))
-#letter c is a function of some type....
-#estimate of goodness of fit
-cor(y, predict(fit_2))
-
-summary(fit_2)
-```
-
