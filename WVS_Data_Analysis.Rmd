@@ -1381,7 +1381,7 @@ WVS_Data_Precentages2<- WVS_Data_Precentages1[, -grep("Missing", colnames(WVS_Da
 
 #Now that we have completed the sensitiviy analysis we need to remove all the "Neg1" Columns
 WVS_Data_Precentages3<- WVS_Data_Precentages2[, -grep("Neg1", colnames(WVS_Data_Precentages2))]
-
+WVS_Data_Precentages4<- WVS_Data_Precentages3[, -grep("Know", colnames(WVS_Data_Precentages3))]
 
 #write.csv(WVS_Data_Precentages, file = "WVS_Data_Percentages.csv")
 ```
@@ -1407,7 +1407,7 @@ barplot(Variances)
 #Break into two groups - Questions with 2 answers and those with more than 2 answers. 
 #Two answer questions: 12-22, 24, 36-44, 66, 82, 83, 148, 149, 150, 151, 176, 177, 178, 179, 180, 234, 235, 236, 240, 243, 244, 245,246, 250, 252
 
-TwoCategoryQuestions<- WVS_Data_Precentages3[,c("V24_1","V24_2",
+TwoCategoryQuestions<- WVS_Data_Precentages4[,c("V24_1","V24_2",
                                                 "V66_1","V66_2",
                                                 "V82_1","V82_2",
                                                 "V83_1","V83_2" ,
@@ -1420,12 +1420,13 @@ TwoCategoryQuestions<- WVS_Data_Precentages3[,c("V24_1","V24_2",
                                                 "V178_1","V178_5",
                                                 "V179_1","V179_5",
                                                 "V180_1","V180_5",
+                                                "V187_1", "V187_2",
                                                 "V243_1","V243_2",
                                                 "V244_1","V244_2",
                                                 "V245_1","V245_2",
                                                 "V246_1","V246_2")]
 Variances_TwoCategory<- c()
-for(i in 1:34){
+for(i in 1:36){
   Question_Variance_TwoCategory <- var(TwoCategoryQuestions[,i])
   Variances_TwoCategory <- cbind(Variances_TwoCategory, Question_Variance_TwoCategory)
 }
@@ -1439,7 +1440,7 @@ dev.off()
 ```
 
 ```{r Mention-Not Mention Questions}
-MentionQuestions<- WVS_Data_Precentages3[,c("V12_1", "V12_2",
+MentionQuestions<- WVS_Data_Precentages4[,c("V12_1", "V12_2",
                                                        "V13_1", "V13_2",
                                                        "V14_1", "V14_2",
                                                        "V15_1", "V15_2",
@@ -1473,13 +1474,14 @@ barplot(Variances_Mention)
 dev.off()
 
 ```
+
 ```{r Questions with 3 or more response categories}
 remove <- c(colnames(TwoCategoryQuestions), colnames(MentionQuestions))
-MultipleCat_Questions<- WVS_Data_Precentages3[,!colnames(WVS_Data_Precentages3) %in% remove]
+MultipleCat_Questions<- WVS_Data_Precentages4[,!colnames(WVS_Data_Precentages4) %in% remove]
 
 
 Variances_MultipleCat<- c()
-for(i in 1:821){
+for(i in 1:798){
   Question_Variance_MultipleCat <- var(MultipleCat_Questions[,i])
   Variances_MultipleCat <- cbind(Variances_MultipleCat, Question_Variance_MultipleCat)
 }
@@ -1495,7 +1497,7 @@ dev.off()
 
 For these plots, we decided to remove the "no" and "not_mention" variables from the principle component analysis because the variance will load in equal but opposite directions and could mask other relationships.
 ```{r}
-BinaryQuestions_RemoveVarible <- colnames(WVS_Data_Precentages3[,c("V12_2","V13_2", "V14_2", "V15_2", 
+BinaryQuestions_RemoveVarible <- colnames(WVS_Data_Precentages4[,c("V12_2","V13_2", "V14_2", "V15_2", 
                                                        "V16_2", "V17_2", "V18_2", 
                                                        "V19_2",  "V20_2", "V21_2", 
                                                        "V22_2", "V36_2", "V37_2", 
@@ -1504,11 +1506,11 @@ BinaryQuestions_RemoveVarible <- colnames(WVS_Data_Precentages3[,c("V12_2","V13_
                                                        "V44_2", "V24_2", "V66_2",
                                                        "V82_2","V83_2","V148_2","V149_2",
                                                        "V150_2", "V151_2","V176_5", "V177_5",
-                                                       "V178_5","V179_5","V180_5","V243_2",
+                                                       "V178_5","V179_5","V180_5","V187_2","V243_2",
                                                        "V244_2","V245_2", "V246_2")])
                                          
                                     
-WVS_Data_Precentages4 <- WVS_Data_Precentages3[,!colnames(WVS_Data_Precentages3) %in% BinaryQuestions_RemoveVarible] 
+WVS_Data_Precentages5 <- WVS_Data_Precentages4[,!colnames(WVS_Data_Precentages4) %in% BinaryQuestions_RemoveVarible] 
 ```
 
 #Prinicple Component Analysis
@@ -1522,7 +1524,7 @@ http://www.sthda.com/english/wiki/principal-component-analysis-in-r-prcomp-vs-pr
 ```{r PCA Analysis}
 #Based on observation of the varianances, we decided to remove half of the binary variables - since they are essentially equal and opposite. We kept on the positive responses. 
 
-PCA_Analysis_Data <- WVS_Data_Precentages4
+PCA_Analysis_Data <- WVS_Data_Precentages5
 PCA_Analysis <-prcomp(PCA_Analysis_Data)
 summary(PCA_Analysis)
 ```
@@ -1721,7 +1723,7 @@ Control <- GDP_Control$`2015 GDP`/10^9 #down to 55 countries
 #Linear Regression
 ```{r}
 fullregression <- lm(log(GDP_Control$RE_Generation +1) ~GDP_Control$PC1 + GDP_Control$PC2 + 
-                       GDP_Control$PC3 + GDP_Control$PC4 + GDP_Control$PC5 + Control)
+                       GDP_Control$PC3 + GDP_Control$PC4 + Control)
 summary(fullregression)
 ```
 
