@@ -16,7 +16,6 @@ setwd("~/GitHub/WVS_Analysis_Leigh_Allison")
 #Importing Data
 I have subsetted the data from the Wave 6 WVS based on the integrated code book. In total there are 348 variables/questions. A couple of questions have two variables associated with them which will be explained later. 
 ```{r Load Raw Data}
-
 PFL_data      <- read.csv("PFL_Raw_Data.csv")
 Enviro_data   <- read.csv("Enviro_Raw_Data.csv")
 Work_data     <- read.csv("Work_Raw_Data.csv")
@@ -29,7 +28,6 @@ Science_data  <- read.csv("Science_Raw_Data.csv")
 SD_data       <- read.csv("SD_Raw_Data.csv")
 
 # We need the names in order to merge it with a world map. In order for the merge to work, we had to change the names to match the world map shape file. 
-
 Country_Names <-read.csv("Country_Code_Names.csv")
 Country_Names <-Country_Names[,c("Country.Code", "Country.Title")]
 ```
@@ -286,7 +284,7 @@ for(col in Cat_Question_Column_Names){ #starting with first question
      precentages <- rbind(precentages, percent)
    }
 
-    colnames(precentages) <- c("0", "1", "2", "3", "4", "5", "6", "7", "8", "Neg1", "Missing", "AdminNA")
+    colnames(precentages) <- c("0", "1_Ref", "2", "3", "4", "5", "6", "7", "8", "Neg1", "Missing", "AdminNA")
     Categorical_Percentages<- precentages 
   
   #Need to store the precent dataframe under question name
@@ -333,6 +331,7 @@ Cat_Precentage_DFs_list<- list(V4=V4, V5=V5, V6=V6, V7=V7, V8=V8, V9=V9, V10=V10
                                V222_ESMA=V222_ESMA, V228A=V228A, V228B=V228B, V228C=V228C,V228D=V228D,
                                V228E=V228E, V228F=V228F, V228G=V228G, V228H=V228H, V228I=V228I, V228J=V228J, V228K=V228K,
                                V243_AU=V243_AU,  V244_AU=V244_AU)     
+
 #Questions 144, 215 (political organizations), 241, 242 (age), 247 (language), 249 (age of complete school),254 (ethnicity), 256 were removed beause they were coded using political organizations, religion, age, languages, regions and ethnicities 
 #219_ESMA was removed because it was not answered by any of the 60 countries.
 #228 and 228_2 were removed because they are related to political parties in specific countries
@@ -340,6 +339,8 @@ country.codes <- sumbyresponse_all$Group.1
 ```
 
 Contained within this dataframe are the variables representing the precentage of people from each nation who did not respond to a questions as well as those who were not asked the questions. We want to remove countries and questions that have large amounts of administrative missingness. No repsonse is considered a choice be the respondant and could introduce interesting patterns. Therefore, the true missingness or no response catgory is kept in the analysis. We still created a separate dataframe inorder to visualize the missingness of both kinds. 
+
+#Missing Data
 ```{r Visualizing Categorical Missing - No Response Data, eval=FALSE}
 #Making a dataframe of columns for the missing responses - 
 Missing_DF <- c()
@@ -349,11 +350,11 @@ for(df in Cat_Precentage_DFs_list){
 }
 Cat_Question_Column_Names_Missing <- names(Cat_Precentage_DFs_list)
 colnames(Missing_DF) <- Cat_Question_Column_Names_Missing
-rownames(Missing_DF) <- country.codes
+rownames(Missing_DF) <- country.codes 
 
 #Created a weighted scatterplot to determine which questions or countries should be removed. 
 library(corrplot)
-install.packages("RColorBrewer")
+#install.packages("RColorBrewer")
 library(RColorBrewer)
 
 Missing_DF1 <- Missing_DF[1:60,1:72]
@@ -366,7 +367,7 @@ pdf("Missing_DF2_Plot.pdf", width = 28, height = 14, paper="USr")
 corrplot(Missing_DF2, is.corr = FALSE, method = "color", tl.cex=0.4, tl.col= "black" , col= colorRampPalette(c("blue", "gray", "red"))(100), cl.lim=c(0,100), addgrid.col = "white", title = "Missingness 2 of 3", mar = c(2,2,2,2))
 dev.off()
 
-Missing_DF3 <- Missing_DF[1:60,144:216]
+Missing_DF3 <- Missing_DF[1:60,144:202]
 pdf("Missing_DF3_Plot.pdf", width = 28, height = 14, paper="USr")
 corrplot(Missing_DF3, is.corr = FALSE, method = "color", tl.cex=0.4, tl.col= "black" , col= colorRampPalette(c("blue", "gray", "red"))(100), cl.lim=c(0,100), addgrid.col = "white", title = "Missingness 3 of 3", mar = c(2,2,2,2))
 dev.off()
@@ -376,9 +377,8 @@ corrplot(Missing_DF, is.corr = FALSE, method = "color", tl.cex=0.5, tl.col= "bla
 dev.off()
 ```
 
-#SOMETHING WRONG
+#AdminNA Data
 ```{r Visualizing Categorical AdminNA Data}
-
 #Making a dataframe of columns for the Administravitive missing (AdminNA or -6) responses - 
 AdminNA_DF <- c()
 for(df in Cat_Precentage_DFs_list){
@@ -386,24 +386,29 @@ for(df in Cat_Precentage_DFs_list){
   AdminNA_DF <- cbind(AdminNA_DF, AdminNA_DF_add)
 }
 
-AdminNA_DF<- as.data.frame(AdminNA_DF)
+AdminNA_DF<- as.matrix(AdminNA_DF)
 Cat_Question_Column_Names_AdminNA <- names(Cat_Precentage_DFs_list)
 colnames(AdminNA_DF) <- Cat_Question_Column_Names_AdminNA
 rownames(AdminNA_DF) <- country.codes
 
+summary(apply(AdminNA_DF, 2, function(x) any(is.na(x))))
+
+any(is.na(AdminNA_DF) | is.infinite(AdminNA_DF))
+
+
 AdminNA_DF1 <- AdminNA_DF[1:60,1:72]
-#pdf("AdminNA_DF1_Plot.pdf", width = 28, height = 14, paper="USr")
-#corrplot(AdminNA_DF1, is.corr = FALSE, method = "color", tl.cex=0.5, tl.col= "black" , col= colorRampPalette(c("blue", "gray", "red"))(100), cl.lim=c(0,100), addgrid.col = "white", title = "AdminNA - 1 of 3", mar = c(2,2,2,2))
-#dev.off()
+pdf("AdminNA_DF1_Plot.pdf", width = 28, height = 14, paper="USr")
+corrplot(AdminNA_DF1, is.corr = FALSE, method = "color", tl.cex=0.5, tl.col= "black" , col= colorRampPalette(c("blue", "gray", "red"))(100), cl.lim=c(0,100), addgrid.col = "white", title = "AdminNA - 1 of 3", mar = c(2,2,2,2))
+dev.off()
 
 AdminNA_DF2 <- AdminNA_DF[1:60,73:144]
-#pdf("AdminNA_DF2_Plot.pdf", width = 28, height = 14, paper="USr")
-#corrplot(AdminNA_DF2, is.corr = FALSE, method = "color", tl.cex=0.4, tl.col= "black" , col= colorRampPalette(c("blue", "gray", "red"))(100), cl.lim=c(0,100), addgrid.col = "white", title = "AdminNA - 2 of 3", mar = c(2,2,2,2))
-#dev.off()
+pdf("AdminNA_DF2_Plot.pdf", width = 28, height = 14, paper="USr")
+corrplot(AdminNA_DF2, is.corr = FALSE, method = "color", tl.cex=0.4, tl.col= "black" , col= colorRampPalette(c("blue", "gray", "red"))(100), cl.lim=c(0,100), addgrid.col = "white", title = "AdminNA - 2 of 3", mar = c(2,2,2,2))
+dev.off()
 
 AdminNA_DF3 <- AdminNA_DF[1:60,144:202]
-#pdf("AdminNA_DF3_Plot.pdf", width = 28, height = 14, paper="USr")
-#corrplot(AdminNA_DF3, is.corr = FALSE, method = "color", tl.cex=0.4, tl.col= "black" , col= colorRampPalette(c("blue", "gray", "red"))(100), cl.lim=c(0,100), addgrid.col = "white", title = "AdminNA - 3 of 3", mar = c(2,2,2,2))
+pdf("AdminNA_DF3_Plot.pdf", width = 28, height = 14, paper="USr")
+corrplot(AdminNA_DF3, is.corr = FALSE, method = "color", tl.cex=0.4, tl.col= "black" , col= colorRampPalette(c("blue", "gray", "red"))(100), cl.lim=c(0,100), addgrid.col = "white", title = "AdminNA - 3 of 3", mar = c(2,2,2,2))
 #dev.off()
 
 pdf("AdminNA_DF_Plot.pdf", width = 3000, height = 500, paper="USr")
@@ -411,7 +416,7 @@ corrplot(AdminNA_DF, is.corr = FALSE, method = "color", tl.cex=0.5, tl.col= "bla
 dev.off()
 ```
 
-
+#Don't Know Data
 ```{r Visualizing "Don't Know Data"}
 #Making a dataframe of columns for the missing responses - 
 Dontknow_DF <- c()
@@ -574,7 +579,6 @@ for (value in aColumn){
 #Example Question Calculation 
 Before we run the analysis on all the questions, let's look at the break down of question V95. It is a ordinal questions with a likert scale of 1 to 10. 
 ```{r V95 Example}
-
 Ordinal_Question_Counts_Example <- data.frame()
 #The result below shows the number of people (worldwide who answered category 1, 2,...,10) - not divided by country
 V95_Global <- Likert_Count_Calc(Updated_Ordinal_data$V95)
@@ -693,7 +697,7 @@ for(df in Ordinal_df){
   NA_Admin <- df[,13]
 
 Categorized <-cbind(VLow, Low, Med, High, VHigh, DontKnow, Missing, NA_Admin)
-colnames(Categorized) <- c("Very Low", "Low", "Med", "High", " Very High", "Dont Know", "Missing", "NA_Admin")
+colnames(Categorized) <- c("Very Low_Ref", "Low", "Med", "High", " Very High", "Dont Know", "Missing", "NA_Admin")
 colnames(Categorized) <- paste(Ordinal_Question_Column_Names[count], colnames(Categorized), sep = "_")
 assign(Ordinal_Question_Category[count], Categorized)
 count=count+1
@@ -738,7 +742,7 @@ Missing <-V161_Precent[,11]*100
 NA_Admin <- V161_Precent[,12]*100
 
 V161_Categorized <-cbind(Low_V161, Med_V161, High_V161, DontKnow, Missing, NA_Admin)
-colnames(V161_Categorized) <- c("V161_Low", "V161_Med", "V161_High", "V161_Dont Know", "V161_Missing", "V161_NA_Admin")
+colnames(V161_Categorized) <- c("V161_Low_Ref", "V161_Med", "V161_High", "V161_Dont Know", "V161_Missing", "V161_NA_Admin")
 head(V161_Categorized)
 
 #check
@@ -775,7 +779,7 @@ Missing <-V162_Precent[,11]*100
 NA_Admin <- V162_Precent[,12]*100
 
 V162_Categorized <-cbind(Low_V162, Med_V162, High_V162, DontKnow, Missing, NA_Admin)
-colnames(V162_Categorized) <- c("V162_Low", "V162_Med", "V162_High", "V162_Dont Know", "V162_Missing", "V162_NA_Admin")
+colnames(V162_Categorized) <- c("V162_Low_Ref", "V162_Med", "V162_High", "V162_Dont Know", "V162_Missing", "V162_NA_Admin")
 head(V162_Categorized)
 
 #check
@@ -812,7 +816,7 @@ Missing <-V163_Precent[,11]*100
 NA_Admin <- V163_Precent[,12]*100
 
 V163_Categorized <-cbind(Low_V163, Med_V163, High_V163,DontKnow, Missing, NA_Admin)
-colnames(V163_Categorized) <- c("V163_Low", "V163_Med", "V163_High", "V163_Dont Know", "V163_Missing", "V163_NA_Admin")
+colnames(V163_Categorized) <- c("V163_Low_Ref", "V163_Med", "V163_High", "V163_Dont Know", "V163_Missing", "V163_NA_Admin")
 head(V163_Categorized)
 
 #check
@@ -851,7 +855,7 @@ for(df in Ordinal_Precentage_DFs_list){
 }
 
 Ordinal_Question_Column_Names_Missing <- names(Updated_Ordinal_data)[c(4:54)] #51 columns
-rownames(Missing_DF) <- country.codes
+rownames(Missing_DF_Ordinal) <- country.codes
 
 #Add the Missing data from V161,162, and 163
 Missing_DF_Ordinal <- cbind(Missing_DF_Ordinal, V161_Categorized[,5], V162_Categorized[,5], V163_Categorized[,5])
@@ -926,14 +930,14 @@ Now that both the categorical and ordinal variables are on the same scale, we ca
 ```{r}
 All_Data <- merge(Cat_Final_Precentage_DFs, Ordinal_Final_Precentage_DFs, by.x=0, by.y=0)
 #NOTE: this data is missing questions 241, 242, 249 - these are free response demographic questions
-write.csv(All_Data, file = "WVS_Data_Percentages.csv")
+write.csv(All_Data, file = "WVS_Data_Percentages_11.25.csv")
 ```
 
 #Sensitivity Analysis for AdminNA (-6)
 There are certain countries with high values of AdminNA values in the data frame. We have the choice of either removing variables or countries. 
 ```{r Combine all AdminaNA Columns}
 Admin_DF_All<- as.data.frame(cbind(AdminNA_DF, AdminNA_DF_Ordinal))
-colSums(is.na(Admin_DF_All)) #double checking that there are no NAs
+#colSums(is.na(Admin_DF_All)) #double checking that there are no NAs
 ```
 
 ##Country Analysis for AdminNA
@@ -1123,6 +1127,7 @@ dev.off()
 
 #To see which questions they skipped
 Removed_Countries_AdminNA <- Reduced_Admin_DF_All[rownames(Reduced_Admin_DF_All) %in% c(414, 634,48,818), ]
+
 pdf("Questionstheyskipped.pdf")
 matplot(t(Removed_Countries_AdminNA), type = c("p"), pch=1, col=1:4, xlab = "Question", ylab = "% of People not asked Question")
 legend("topleft", legend = row.names(Removed_Countries_AdminNA), col=1:4, pch=1)
@@ -1233,7 +1238,7 @@ QuestionstoRemove
 There are certain countries with high values of DontKnow values in the data frame. We have the choice of either removing variables or countries. 
 ```{r Combine all DontKnow Columns}
 DontKnow_DF_All<- as.data.frame(cbind(Dontknow_DF, DontKnow_DF_Ordinal))
-colSums(is.na(DontKnow_DF_All)) #double checking that there are no NAs
+#colSums(is.na(DontKnow_DF_All)) #double checking that there are no NAs
 ```
 
 ##Question Analysis for DontKnow (-1)
@@ -1337,7 +1342,7 @@ QuestionstoRemove
 #This step removes questions from sensitivity analysis above
 Cat_Precentage_DFs <- cbind(V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,V20,V21,V22,V25,V26,V27,V28,
                            V29,V30,V31,V32,V33,V34,V35,V37,V42,V39,V38,V36,V40,V41,V43,V44,V24,V70,V71,V72,V73,V75,
-                           V76, V77,V78,V79,V74,V164,V165,V166,V167,V168,V169,V81,V82,V83,V45,V46,
+                           V76, V77,V78,V79,V74,V165,V166,V167,V168,V169,V81,V82,V83,V45,V46,
                            V102,V49,V54,V51,V52,V50,V48,V47,V53,
                            V60,V61,V62,V63,V64,V65,V66,V67,V68,V69,V80,V84,V85,V86,V87,V88,V89,V108,V109,V110,V111,V112,
                            V113,V114,V115,V116,V117,V118,V119,V120,V121,V122,V123,V124,V126,V127,V128,V129,V130,V142,
@@ -1390,11 +1395,11 @@ WVS_Data_Precentages4<- WVS_Data_Precentages3[, -grep("Know", colnames(WVS_Data_
 Since the WVS has a variety of different question types, we wanted to look at the variance to determine if a specific type of question would mathematically appear in the components due to the structure of the question. Primarily we were concerned about questions which asked a yes or no question and those that asked a respondant to list 5 attributes they consider important and the  variables were coded as mentioned or not mentioned. We first looked at the variance of all the variables, then the two category responses (yes or no), then the lists (mention or not mentioned).
 ```{r All variables}
 Variances <- c()
-for(i in 1:895){
-  Question_Variance <- var(WVS_Data_Precentages3[,i])
+for(i in 1:835){
+  Question_Variance <- var(WVS_Data_Precentages4[,i])
   Variances <- cbind(Variances, Question_Variance)
 }
-colnames(Variances)<-colnames(WVS_Data_Precentages3)
+colnames(Variances)<-colnames(WVS_Data_Precentages4)
 Variance_Sorted <- t(Variances)
 #pdf("Variance distribution.pdf", paper = "USr")
 par(mfrow=c(2, 1))
@@ -1407,24 +1412,24 @@ barplot(Variances)
 #Break into two groups - Questions with 2 answers and those with more than 2 answers. 
 #Two answer questions: 12-22, 24, 36-44, 66, 82, 83, 148, 149, 150, 151, 176, 177, 178, 179, 180, 234, 235, 236, 240, 243, 244, 245,246, 250, 252
 
-TwoCategoryQuestions<- WVS_Data_Precentages4[,c("V24_1","V24_2",
-                                                "V66_1","V66_2",
-                                                "V82_1","V82_2",
-                                                "V83_1","V83_2" ,
-                                                "V148_1","V148_2",
-                                                "V149_1","V149_2",
-                                                "V150_1","V150_2",
-                                                "V151_1","V151_2",
-                                                "V176_1","V176_5",
-                                                "V177_1","V177_5",
-                                                "V178_1","V178_5",
-                                                "V179_1","V179_5",
-                                                "V180_1","V180_5",
-                                                "V187_1", "V187_2",
-                                                "V243_1","V243_2",
-                                                "V244_1","V244_2",
-                                                "V245_1","V245_2",
-                                                "V246_1","V246_2")]
+TwoCategoryQuestions<- WVS_Data_Precentages4[,c("V24_1_Ref","V24_2",
+                                                "V66_1_Ref","V66_2",
+                                                "V82_1_Ref","V82_2",
+                                                "V83_1_Ref","V83_2" ,
+                                                "V148_1_Ref","V148_2",
+                                                "V149_1_Ref","V149_2",
+                                                "V150_1_Ref","V150_2",
+                                                "V151_1_Ref","V151_2",
+                                                "V176_1_Ref","V176_5",
+                                                "V177_1_Ref","V177_5",
+                                                "V178_1_Ref","V178_5",
+                                                "V179_1_Ref","V179_5",
+                                                "V180_1_Ref","V180_5",
+                                                "V187_1_Ref", "V187_2",
+                                                "V243_1_Ref","V243_2",
+                                                "V244_1_Ref","V244_2",
+                                                "V245_1_Ref","V245_2",
+                                                "V246_1_Ref","V246_2")]
 Variances_TwoCategory<- c()
 for(i in 1:36){
   Question_Variance_TwoCategory <- var(TwoCategoryQuestions[,i])
@@ -1432,34 +1437,34 @@ for(i in 1:36){
 }
 colnames(Variances_TwoCategory)<-colnames(TwoCategoryQuestions)
 Variance_Sorted_TwoCategory <- t(Variances_TwoCategory)
-pdf("Variance_TwoCategory distribution.pdf", paper = "USr")
+#pdf("Variance_TwoCategory distribution.pdf", paper = "USr")
 par(mfrow=c(2, 1))
 hist(Variances_TwoCategory)
 barplot(Variances_TwoCategory)
-dev.off()
+#dev.off()
 ```
 
 ```{r Mention-Not Mention Questions}
-MentionQuestions<- WVS_Data_Precentages4[,c("V12_1", "V12_2",
-                                                       "V13_1", "V13_2",
-                                                       "V14_1", "V14_2",
-                                                       "V15_1", "V15_2",
-                                                       "V16_1", "V16_2",
-                                                       "V17_1", "V17_2",
-                                                       "V18_1", "V18_2",
-                                                       "V19_1", "V19_2",
-                                                       "V20_1", "V20_2",
-                                                       "V21_1", "V21_2",
-                                                       "V22_1", "V22_2",
-                                                       "V36_1", "V36_2",
-                                                       "V37_1", "V37_2",
-                                                       "V38_1", "V38_2",
-                                                       "V39_1", "V39_2",
-                                                       "V40_1", "V40_2",
-                                                       "V41_1", "V41_2",
-                                                       "V42_1", "V42_2",
-                                                       "V43_1", "V43_2",
-                                                       "V44_1", "V44_2")]
+MentionQuestions<- WVS_Data_Precentages4[,c("V12_1_Ref", "V12_2",
+                                                       "V13_1_Ref", "V13_2",
+                                                       "V14_1_Ref", "V14_2",
+                                                       "V15_1_Ref", "V15_2",
+                                                       "V16_1_Ref", "V16_2",
+                                                       "V17_1_Ref", "V17_2",
+                                                       "V18_1_Ref", "V18_2",
+                                                       "V19_1_Ref", "V19_2",
+                                                       "V20_1_Ref", "V20_2",
+                                                       "V21_1_Ref", "V21_2",
+                                                       "V22_1_Ref", "V22_2",
+                                                       "V36_1_Ref", "V36_2",
+                                                       "V37_1_Ref", "V37_2",
+                                                       "V38_1_Ref", "V38_2",
+                                                       "V39_1_Ref", "V39_2",
+                                                       "V40_1_Ref", "V40_2",
+                                                       "V41_1_Ref", "V41_2",
+                                                       "V42_1_Ref", "V42_2",
+                                                       "V43_1_Ref", "V43_2",
+                                                       "V44_1_Ref", "V44_2")]
 Variances_Mention<- c()
 for(i in 1:40){
   Question_Variance_Mention <- var(MentionQuestions[,i])
@@ -1467,12 +1472,11 @@ for(i in 1:40){
 }
 colnames(Variances_Mention)<-colnames(MentionQuestions)
 Variance_Sorted_Mention<- t(Variances_Mention)
-pdf("Variance_Mention distribution.pdf", paper = "USr")
+#pdf("Variance_Mention distribution.pdf", paper = "USr")
 par(mfrow=c(2, 1))
 hist(Variances_Mention)
 barplot(Variances_Mention)
-dev.off()
-
+#dev.off()
 ```
 
 ```{r Questions with 3 or more response categories}
@@ -1481,21 +1485,21 @@ MultipleCat_Questions<- WVS_Data_Precentages4[,!colnames(WVS_Data_Precentages4) 
 
 
 Variances_MultipleCat<- c()
-for(i in 1:798){
+for(i in 1:759){
   Question_Variance_MultipleCat <- var(MultipleCat_Questions[,i])
   Variances_MultipleCat <- cbind(Variances_MultipleCat, Question_Variance_MultipleCat)
 }
 colnames(Variances_MultipleCat)<-colnames(MultipleCat_Questions)
 Variance_Sorted_MultipleCat<- t(Variances_MultipleCat)
 
-pdf("Variance_MultipleCat distribution.pdf", paper = "USr")
+#pdf("Variance_MultipleCat distribution.pdf", paper = "USr")
 par(mfrow=c(2, 1))
 hist(Variances_MultipleCat)
 barplot(Variances_MultipleCat)
-dev.off()
+#dev.off()
 ```
 
-For these plots, we decided to remove the "no" and "not_mention" variables from the principle component analysis because the variance will load in equal but opposite directions and could mask other relationships.
+For these plots, we decided to remove the "no" and "not_mention" variables from the principle component analysis because the variance will load in equal but opposite directions and could mask other relationships. Since we are removing the first category of each questions we don't need to change the binary questions
 ```{r}
 BinaryQuestions_RemoveVarible <- colnames(WVS_Data_Precentages4[,c("V12_2","V13_2", "V14_2", "V15_2", 
                                                        "V16_2", "V17_2", "V18_2", 
@@ -1511,6 +1515,66 @@ BinaryQuestions_RemoveVarible <- colnames(WVS_Data_Precentages4[,c("V12_2","V13_
                                          
                                     
 WVS_Data_Precentages5 <- WVS_Data_Precentages4[,!colnames(WVS_Data_Precentages4) %in% BinaryQuestions_RemoveVarible] 
+write.csv(WVS_Data_Precentages5, "MIRT_data.csv")
+```
+
+#Normality Test
+
+Multivariate Normality - requires variables to be independent
+https://cran.r-project.org/web/packages/MVN/vignettes/MVN.pdf
+```{r}
+#install.packages("nortest")
+library("nortest")
+
+normality_test <- apply(WVS_Data_Precentages5, 2, ad.test)
+
+#Need to determine which variables have significant p-values
+normality_p.values <- c()
+variable_names <- colnames(WVS_Data_Precentages5)
+
+for(col in c(1:797)){
+  variable_normality <- normality_test[[col]]
+  p.value <- variable_normality$p.value
+  normality_p.values <- cbind(normality_p.values, p.value)
+}
+
+colnames(normality_p.values) <-variable_names
+
+#p-values less than 0.05 mean the variables are non-normal
+nonnormal_variables <- t(normality_p.values)
+nonnormal_variables[nonnormal_variables > 0.01] = NA
+nonnormal_variables <- as.data.frame(t(na.omit(nonnormal_variables)))
+
+normal_variables <- t(normality_p.values)
+normal_variables[normal_variables < 0.01] = NA
+normal_variables <- as.data.frame(t(na.omit(normal_variables)))
+```
+321 of the 797 varaiables are not normal according to the Anderson-Darling test of normality with a p-value of 0.0, leaving 476 normal variables
+
+#Intercorrelation between Variables
+Let's take a look into how the variables are related - these relationships are a combination of lantent varaiables and the fact that they are dummy variables.
+```{r}
+corrplot(cor(as.matrix(WVS_Data_Precentages5[,1:50])))
+corrplot(cor(as.matrix(WVS_Data_Precentages5[,51:100])))
+corrplot(cor(as.matrix(WVS_Data_Precentages5[,101:150])))
+corrplot(cor(V136_Count))
+```
+
+```{r}
+d <- dist(t(WVS_Data_Precentages5), method = "euclidean") # distance matrix
+fit <- hclust(d, method="ward") 
+plot(fit) # display dendogram
+groups <- cutree(fit, k=5) # cut tree into 5 clusters
+# draw dendogram with red borders around the 5 clusters 
+rect.hclust(fit, k=5, border="red")
+```
+
+#Data for PCA
+Using WVS 4 instead of five because we don't want to remove the binary questions completely.
+```{r}
+#Now that we have to remove our reference category before running the PCA. 
+WVS_Data_Precentages6<- WVS_Data_Precentages4[, -grep("Ref", colnames(WVS_Data_Precentages4))]
+#write.csv(WVS_Data_Precentages6, "PCA_Data_113017.csv")
 ```
 
 #Prinicple Component Analysis
@@ -1524,7 +1588,7 @@ http://www.sthda.com/english/wiki/principal-component-analysis-in-r-prcomp-vs-pr
 ```{r PCA Analysis}
 #Based on observation of the varianances, we decided to remove half of the binary variables - since they are essentially equal and opposite. We kept on the positive responses. 
 
-PCA_Analysis_Data <- WVS_Data_Precentages5
+PCA_Analysis_Data <- WVS_Data_Precentages6
 PCA_Analysis <-prcomp(PCA_Analysis_Data)
 summary(PCA_Analysis)
 ```
@@ -1537,7 +1601,7 @@ abline(h=5000, col="red")
 dev.off()
 
 plot(PCA_Analysis, main = "ScreePlot", type = "l")
-abline(h=5000, col="red")
+abline(h=3000, col="red")
 ```
 
 #PCA Result Analysis
@@ -1557,7 +1621,7 @@ write.csv(Named_PCA_Analysis_Data, file="PCA_Scores_Named.csv")
 PCA_Loadings <- round(PCA_Analysis$rotation [,c(1:5)], 3)
 head(PCA_Loadings)
 PCA_Loadings <- as.data.frame(PCA_Loadings)
-write.csv(PCA_Loadings, file= "PCA_Loadings.csv")
+write.csv(PCA_Loadings, file= "PCA_Loadings_11.26.csv")
 
 #Plots of Components
 pdf("Loading distribution.pdf", paper = "USr")
@@ -1609,8 +1673,64 @@ dev.off()
 ```{r Cleaning out values smaller than 0.1}
 PCA_Loadings[abs(PCA_Loadings) < 0.1] = NA
 PCA_Loadings_Cleaned <- PCA_Loadings[rowSums(is.na(PCA_Loadings))!= 5, ]
-write.csv(PCA_Loadings_Cleaned, file= "PCA_Loadings_Cleaned.csv")
+write.csv(PCA_Loadings_Cleaned, file= "PCA_Loadings_Cleaned_11.26.csv")
 ```
+
+#Cleaning Individual Data
+```{r}
+Individual_Data<- merge(Updated_Categorical_data,Updated_Ordinal_data, by.x = "X", by.y = "X")
+
+#We need to remove the countries chosen above
+countries_to_remove_ind <-  c(414, 634,48,818)
+#Questions to Remove based on national sensitiviey analysis.
+#AdminaNA
+ [1] "V74B"      "V90"       "V91"       "V92"       "V93"       "V94"       "v160A"     "v160B"     "v160C"    
+[10] "v160D"     "v160E"     "v160F"     "v160G"     "v160H"     "v160I"     "v160J"     "V217_ESMA" "V218_ESMA"
+[19] "V224_ESMA" "V220_ESMA" "V221_ESMA" "V222_ESMA" "V228A"     "V228B"     "V228C"     "V228D"     "V228E"    
+[28] "V228F"     "V228G"     "V228H"     "V228I"     "V228J"     "V228K"     "V243_AU"   "V244_AU"   "V56_NZ"   
+[37] "V203A"     "V207A" 
+#Missing - none
+#Don'tKnow
+"V133" "V140" "V193" "V152"
+
+
+#make one DF with all the single question dataframes
+#Questions 144, 247,254, 256 were removed beause they were coded using religion, languages, regions and ethnicities 
+#219_ESMA was removed because it was not answered by any of the 60 countries.
+#228 and 228_2 were removed because they are related to political parties in specific countries
+#Removed sociodemographic questions "V57"  "V58"  "V229" "V230" "V234" "V235" "V236" "V237" "V238" "V240" "V248" "V250" "V253" "V254" "V255" "V256"
+
+#Questions 144, 215 (political organizations), 241, 242 (age), 247 (language), 249 (age of complete school),254 (ethnicity), 256 were removed beause they were coded using political organizations, religion, age, languages, regions and ethnicities 
+#219_ESMA was removed because it was not answered by any of the 60 countries.
+#228 and 228_2 were removed because they are related to political parties in specific countries
+
+Cleaned_Individual_Data<- Individual_Data[,-which(names(Individual_Data) %in% c("V144", "V247", "V254","V256","V219_ESMA", "V228", "V228_2", "V57","V58","V229","V230","V234","V235","V236","V237","V238","V240","V248","V250", "V253","V255","V256", "V74B","V90","V91","V92","V93","V94","v160A","v160B","v160C","v160D","v160E",  "v160F","v160G","v160H","v160I","v160J",
+"V217_ESMA","V218_ESMA","V224_ESMA","V220_ESMA","V221_ESMA","V222_ESMA","V228A","V228B", "V228C","V228D","V228E",
+"V228F","V228G","V228H","V228I","V228J", "V228K","V243_AU","V244_AU","V56_NZ","V203A","V207A","V133","V140","V193",
+"V152", "V215", "V241", "V242", "V249", "V215_01","V215_02","V215_03","V215_04","V215_05","V215_06","V215_07",
+"V215_08","V215_09","V215_10","V215_11","V215_12","V215_13","V215_14","V215_15","V215_16","V215_17","V215_18"))]
+
+Cleaned_Individual_Data <- Cleaned_Individual_Data[-which(Cleaned_Individual_Data$V2.x %in% c(414,634,48,818)),]
+
+
+RecodetoNA<- function(QuestionColName){
+  QuestionColName<- recode(QuestionColName, "c(-1,-2,-6) = NA")
+}
+
+Cleaned_Individual_Data_NA <- as.data.frame(apply(Cleaned_Individual_Data,2,RecodetoNA))
+  
+write.csv(Cleaned_Individual_Data, "Cleaned_Individual_Data_Raw.csv")
+
+Individual_Data_Final <- Cleaned_Individual_Data[,4:227]
+
+Indiv_Model <- mirt(Individual_Data_Final, 4, itemtype = "nominal", survey.weights = Cleaned_Individual_Data$V258.x)
+Indiv_Model_Summary <- summary(Indiv_Model)
+
+Oblimin_Factors <- Indiv_Model_Summary$rotF
+write.csv(Oblimin_Factors, "Indiv_Factor_Loadings.csv")
+plot(Oblimin_Factors[,1])
+```
+
 
 
 
@@ -1676,7 +1796,6 @@ dev.off()
 
 #Merge RE and PS Data
 Now that we have established princible components with country component scorse based on the majority of the WVS Survey questions in Wave 6, we can merge the renewable electricity data and the component scores by country. Unfortunatetly, 3 countries (Rwanda, Palestine, and Taiwan) are dropped from the analysis because they do not have renewable electricty data.
-
 ```{r}
 Renewable_Scores <- merge(Renewable_merge, Named_PCA_Analysis_Data,
                                    by.x="Country.Name", by.y="Country.Title")
@@ -1688,7 +1807,7 @@ write.csv(Renewable_Scores, file = "Renewable_Scores.csv")
 #Final Data for Regression
 This is the dataframe we will use to explore the relationships between renewable electricity production and cultural values. 
 ```{r}
-Final_Data<- Renewable_Scores 
+Final_Data <- Renewable_Scores 
 ```
 
 
@@ -1704,11 +1823,13 @@ summary(fullregression)
 ##GDP
 There are many variabales associated with the contruction on new infrastructure. The availability of funds to build the infrastructure being a major factor. Therefore, in our regression models we will control for GDP. One country does not have a 2015 GDP values, bringing us down to 52 countries.
 ```{r GDP Control Data}
-GDP_data <- read.csv("World_Bank_GDP_Data.csv")
-GDP_Years <- GDP_data[4,]
+GDP_rawdata <- read.csv("World_Bank_GDP_Data.csv")
+GDP_Years <- GDP_rawdata[4,]
+
 #remove first 4 rows to bring column headers to top
 GDP_data <- GDP_rawdata[c(5:286),]
 colnames(GDP_data) <- GDP_Years
+
 #remove all columns except for country names, and 2015 GDP
 GDP_data2015 <-GDP_data[,c(1,60)]
 colnames(GDP_data2015)<- c("Country.Title", "2015 GDP")
@@ -1716,18 +1837,80 @@ colnames(GDP_data2015)<- c("Country.Title", "2015 GDP")
 GDP_data_named<-merge(GDP_data2015, Country_Names, by.x= "Country.Title", by.y = "Country.Title")
 
 GDP_Control <- merge(GDP_data_named, Final_Data, by.x = "Country.Title", by.y= "Country.Name")
-Control <- GDP_Control$`2015 GDP`/10^9 #down to 55 countries
+
+Control <- GDP_Control$`2015 GDP`/10^9 #down to 53 countries
+```
+```{r}
+Renewable_Resources <- read.csv("Renewable_Resources.csv")
+Wind_Cost_Overruns <- read.csv("Wind_Cost_Overrun_Data.csv")
+
+Wind_Cost_Overruns_Final <- merge(Wind_Cost_Overruns, Country_Names, by.x = "Country", by.y = "Country.Title")
+Cost_Performance_Wind <- merge(Wind_Cost_Overruns_Final, GDP_Control, by.x ="Country.Code", by.y = "Country.Code")
 ```
 
+```{r}
+Political_Infrastructure <- 
+```
 
 #Linear Regression
 ```{r}
-fullregression <- lm(log(GDP_Control$RE_Generation +1) ~GDP_Control$PC1 + GDP_Control$PC2 + 
-                       GDP_Control$PC3 + GDP_Control$PC4 + Control)
+fullregression <- lm(Cost_Performance_Wind$X.Cost.Over.Run ~ Cost_Performance_Wind$PC1 + Cost_Performance_Wind$PC2 + 
+                       Cost_Performance_Wind$PC3 + Cost_Performance_Wind$PC4 + 
+                       Cost_Performance_Wind$Offshore)
+
 summary(fullregression)
 ```
 
-
+#Non Linear Regression
 ```{r}
-plot(fullregression)
+y = Final_Data$RE_Generation
+PC1 = Final_Data$PC1
+PC2 = Final_Data$PC2
+PC3 = Final_Data$PC3
+PC4 = Final_Data$PC4
+
+fit_1 <- nls(y ~ a^PC1 + b^PC2)
+#letter c is a function of some type....
+
+cor(y, predict(fit_1))
+summary(fit_1)
+
 ```
+
+#Analysis at an Invidiual Level
+Theorhetically we should be able to perform reduce the individual level metrics into the same dimensions found in the aggregated data. To do this, we must have a data frame which includes dummy variables for all the categories of the different questions. Every variable will be coded as 0 or 1 depending on if the individual choose that category or not. 
+
+We have removed the same questions and countries due to missingness and have removed the dummy variables associated with -1, -2, and -6.
+
+We do not want to do a latent class analysis because we want to compare nations on a numerical scale. A factor analysis on Binary Data allows us to accomplish this. 
+```{r}
+#install.packages("FactoMineR")
+library("FactoMineR")
+
+#install.packages("ltm")
+library("ltm")
+
+#install.packages("lessR")
+#install.packages("devtools")
+library("lessR")
+library("devtools")
+
+install_github('philchalmers/mirt')
+
+
+install.packages("stats4")
+library("stats4")
+install.packages("lattice")
+library("lattice")
+
+library('mirt')
+
+#install.packages("psych")
+library("psych")
+#install.packages("stats")
+library("stats")
+
+PAF_Test <- factor.pa(WVS_Data_Precentages6, 5)
+FA_Test <- fa(WVS_Data_Precentages6,5)
+```
+
