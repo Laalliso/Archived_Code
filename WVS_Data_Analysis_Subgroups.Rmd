@@ -1,0 +1,1256 @@
+---
+title: "Socio-Demographic Groups"
+output: html_document
+---
+
+First we need to tell R where are the data files are stored. 
+```{r Set Workspace}
+setwd("C:/Users/laall/Desktop/GitHub/WVS_Analysis_Leigh_Allison")
+```
+
+```{r Install Packages, warning=FALSE}
+#install.packages("FactoMineR")
+library("FactoMineR")
+
+#install.packages("ltm")
+library("ltm")
+
+#install.packages("lessR")
+#install.packages("devtools")
+library("lessR")
+library("devtools")
+
+#install.packages("stats4")
+library("stats4")
+
+#install.packages("lattice")
+library("lattice")
+
+
+#install.packages("psych")
+library("psych")
+
+#install.packages("stats")
+library("stats")
+
+#install.packages('Rcpp')
+library("Rcpp")
+
+#install_github('philchalmers/mirt')
+library('mirt')
+
+#install.packages("car", repos = 'http://cran.us.r-project.org')
+library(car)
+```
+
+#Analysis of National Subgroups
+There is some debate as to whether as to the right approach to making national level cultural indicators. We first attempted to aggregate and then find latent dimensions. Since there was no apparent trend, we will now attempt to study a subgroup within a nation. Based on previous studies of culture, gender, age, education, and socio-economic class has been known to affect people's cultural views. We will therefore divide people into these groups and then aggregate by nation to determine if there are any latent cultural dimensions visible when you control for gender, age, education, socio-economic class, and we have added town size as an indication of rural or urban. 
+
+To do this, we must have a data frame which includes all the quesiton variables with the exception of those that we have due to missingness at the national level.
+
+## Invidiual Data: Cleaning
+```{r Load Respondant Data}
+Updated_Categorical_data <- read.csv("Updated_Categorical_Data.csv")
+Updated_Ordinal_data <- read.csv("Updated_Ordinal_Data.csv")
+  
+Individual_Data <- merge(Updated_Categorical_data, Updated_Ordinal_data, by.x = "X", by.y = "X")
+
+#Similar to the aggregate data we want to change the responses that are don't know, missing, or were to asked to NA
+RecodetoNA<- function(QuestionColName){
+  QuestionColName<- recode(QuestionColName, "c(-1,-2,-6) = NA")
+}
+Individual_Data  <- as.data.frame(apply(Individual_Data ,2,RecodetoNA))
+```
+
+#Socio Demongraphic Data
+We stored the SD variables in a separate data frame from the survey questions. We need to load that data into the program in order to analyze it.
+```{r Load SD Data}
+SD_data       <- read.csv("SD_Raw_Data.csv")
+SD_Categorical_Data <- read.csv("SD_Categorical_subset.csv")
+SD_Ordinal_Data <- read.csv("SD_Ordinal_subset.csv")
+```
+
+##Age
+Respondants were asked their age. They interviewer recoded the response in years.  In order to have less options, we grouped people in 5 year increments. 
+```{r Load Age}
+SD_FreeResponse <- read.csv("FR_subset.csv")
+Age_Cat <- 0
+SD_FreeResponse <- cbind(SD_FreeResponse, Age_Cat)
+
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 <= 20] <- "Under20"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 20 & SD_FreeResponse$V242 <= 24] <- "20-24"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 24 & SD_FreeResponse$V242 <= 29] <- "25-29"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 29 & SD_FreeResponse$V242 <= 34] <- "30-34"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 34 & SD_FreeResponse$V242 <= 39] <- "35-39"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 39 & SD_FreeResponse$V242 <= 44] <- "40-44"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 44 & SD_FreeResponse$V242 <= 49] <- "45-49"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 49 & SD_FreeResponse$V242 <= 54] <- "50-54"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 54 & SD_FreeResponse$V242 <= 59] <- "55-59"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 59 & SD_FreeResponse$V242 <= 64] <- "60-64"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 64 & SD_FreeResponse$V242 <= 69] <- "65-69"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 69 & SD_FreeResponse$V242 <= 74] <- "70-74"
+SD_FreeResponse$Age_Cat[SD_FreeResponse$V242 > 74 & SD_FreeResponse$V242 <= 80] <- "75-80"
+```
+
+Socio-demographic variables have been kept separate of question variables because they are characteristics of the person not their values. 
+```{r Identify SD Variables}
+#238 - Economic Class
+#240 - Gender
+#242 - Age (numeric)
+#248 - Education
+#253 - Town Size
+
+Individual_Data_SD<- merge(SD_Categorical_Data[,c("X","V238", "V240", "V248", "V253"), ],Individual_Data, 
+                           by.x = "X", by.y = "X")
+
+PFL_5Ordinal_Data <- read.csv("PFL_5Ordinal_subset.csv")
+#V161,V162,V163 were not in the Updated Ordinal List because they are on the a 5 pt scale instead of 10.
+Individual_Data_SD<- merge(PFL_5Ordinal_Data,Individual_Data_SD, 
+                           by.x = "X", by.y = "X")
+
+Individual_Data_SD <- cbind(Individual_Data_SD, SD_FreeResponse$Age_Cat, SD_FreeResponse$V242)
+```
+
+Using the aggregate analysis finding, we remove the same questions from the individual dataframe that we did from the aggregate data based on the sensitivity analysis.
+```{r Clean Individual Data}
+#Questions to Remove based on national sensitivity analysis.
+
+#Due to high precentages of AdminNA remove questions: V74B,V90,V91,V92,V93,V94,v160A,160B,v160C
+#v160D,v160E,v160F,v160G,v160H,v160I,v160J,V217_ESMA,V218_ESMA,V224_ESMA,V220_ESMA,V221_ESMA,V222_ESMA,V228A,
+#V228B,V228C,V228D,V228E,V228F,V228G,V228H,V228I,V228J,V228K,V243_AU,V244_AU,V56_NZ,V203A,V207A
+
+#Due to high precentages of Missing remove questions - none
+
+#Due to high precentages of Don'tKnow remove questions: V133,V140,V193,V152
+
+#Questions 144 (religion), 215 (political organizations - 18 variables), 247 (language) were removed beause they had to many categories. 
+#219_ESMA was removed because it was not answered by any of the 60 countries.
+#228 and 228_2 were removed because they are related to political parties in specific countries
+
+#Make one DF with all the single question dataframes to remove
+
+Cleaned_Individual_Data_SD<- Individual_Data_SD[,-which(names(Individual_Data_SD) %in% c(
+"V144", "V247","V219_ESMA", "V228", "V228_2", "V74B","V90","V91","V92","V93","V94",
+"V160A","V160B","V160C","V160D","V160E", "V160F","V160G","V160H","V160I","V160J",
+"V217_ESMA","V218_ESMA","V224_ESMA","V220_ESMA","V221_ESMA","V222_ESMA",
+"V228A","V228B", "V228C","V228D","V228E","V228F","V228G","V228H","V228I","V228J", "V228K",
+"V243_AU","V244_AU","V56_NZ","V203A","V207A",
+"V133","V140","V193","V152",
+"V215_01","V215_02","V215_03","V215_04","V215_05","V215_06","V215_07",
+"V215_08","V215_09","V215_10","V215_11","V215_12","V215_13","V215_14","V215_15","V215_16","V215_17","V215_18"))]
+
+#We need to remove the countries chosen above
+countries_to_remove_ind <-  c(414, 634,48,818)
+Cleaned_Individual_Data_SD <- Cleaned_Individual_Data_SD[-which(Cleaned_Individual_Data_SD$V2.x %in% c(414,634,48,818)),]
+
+#This data frame has 226 variables
+write.csv(Cleaned_Individual_Data_SD, "Cleaned_Individual_Data_Raw.csv")
+
+#if we wanted to take out the demographic data to study just the individuals we just remove the columns.
+# still includes country and weight columns
+#should be 219 variables
+Individual_Data_Final <- Cleaned_Individual_Data_SD[,-which(names(Cleaned_Individual_Data_SD) 
+                                                              %in% c("V238", "V240", "V248", "V253", 
+                                                                     "SD_FreeResponse$V242", "SD_FreeResponse$Age_Cat",
+                                                                     "V258.y"))]
+#remove row counting columns
+Individual_Data_Final <- Individual_Data_Final[,-c(1,5)]
+
+Individual_Data_Final<- Individual_Data_Final[ , -which(names(Individual_Data_Final) %in% 
+                                                                          c("V2.y", "X.1.y"))]
+IDV_ColumnNames <- colnames(Individual_Data_Final)
+
+#for the ANOVA analysis, we'd like to keep the 240 and 248 and the 2 age related variables
+#This DF has 223 variables
+Individual_Data_Final_ANOVA <- Cleaned_Individual_Data_SD[,-which(names(Cleaned_Individual_Data_SD) 
+                                                              %in% c("V258.y", "V2.y","X.1.y", "X.1.x"))]
+
+#To make sociodemographic groups, I'm going to start by not including age
+Individual_Data_Final_noAge <- Cleaned_Individual_Data_SD[,-which(names(Cleaned_Individual_Data_SD) 
+                                                              %in% c("SD_FreeResponse$V242", "SD_FreeResponse$Age_Cat",
+                                                                     "V258.y", "V2.y"))]
+
+#to study just the individuals need to also take out the weight and country columns
+#this df has 217 variables (and does not include the SD variables)
+Individual_Data_JustVariables<- Individual_Data_Final[ , -which(names(Individual_Data_Final) %in% 
+                                                                          c("V258.x","V2.x", "V2.y"))]
+```
+
+##Analysis at an Invidiual Level: ANOVA
+In order to understand which variables are contributing to the variance of the questions repsonses, we run ANOVA tests on the randomly selected variables.  Understanding that there are demographic variables which are affecting the responses will help to more accurately aggregate the data at a national level. For those variables which significantly affect the variance of the responses, the question variable will be subdivided by the affecting variable. 
+
+First we must make different dataframe at the individual level. Country, Gender, and Education were recorded as categorical variables; however age had to be grouped by decades to create a factor or categorical variables. 
+
+The ANOVA analysis is done on question individually. Below is code to randomly select a quesiton for each iteration. The code prints the selected question title
+```{r Dataframe for ANOVA}
+#dim(Individual_Data_Final_ANOVA)
+#238 - Economic Class
+#240 - Gender
+#242 - Age (numeric)
+#248 - Education
+#253 - Town Size
+column_number <- sample(1:213, 1)
+colname <- colnames(Individual_Data_JustVariables)[column_number]
+colname
+question <- as.data.frame(cbind(Individual_Data_Final_ANOVA[,colname], 
+                                Individual_Data_Final_ANOVA$V2.x,
+                                Individual_Data_Final_ANOVA$V240,
+                                Individual_Data_Final_ANOVA$V248,
+                                Individual_Data_Final_ANOVA$V238,
+                                Individual_Data_Final_ANOVA$V253,
+                 Individual_Data_Final_ANOVA$`SD_FreeResponse$Age_Cat`,
+                 Individual_Data_Final_ANOVA$`SD_FreeResponse$V242`))
+
+colnames(question)<- c("Question_Response", "Country.Code", "Gender", "Education",
+                       "Economic Class","Town Size", "Age_Cat", "Age")
+```
+
+A primary premise of this analysis is that the country significantly affects respondants choices. To test this we see how much of the variance is accounted for by the country code. We will first look at a single random variable. 
+```{r ANOVA for Country}
+Anova_Model_Country <- lm(question$Question_Response ~ as.factor(question$Country.Code) 
+                  + question$Gender + question$Age_Cat)
+anova(Anova_Model_Country)
+```
+
+Now we see if education level is significantly adding to the variation in responses. 
+```{r ANOVA for Education}
+Anova_Model_Education <- lm(question$Question_Response ~ as.factor(question$Education) 
+                  + question$Gender + question$Age_Cat)
+anova(Anova_Model_Education)
+```
+
+Now we see if town size level is significantly adding to the variation in responses. This includes all 8 levels, as listed in the WVS questionnaire
+```{r ANOVA for Town Size}
+Anova_Model_TownSize <- lm(question$Question_Response ~ as.factor(question$`Town Size`) 
+                  + question$Gender + as.factor(question$Age_Cat))
+anova(Anova_Model_TownSize)
+```
+
+Now we see if economic class is significantly adding to the variation in responses. There are five economic classes: upper class, upper middle, lower middle, working, and lower class. 
+```{r ANOVA for Economic Class}
+Anova_Model_EconClass <- lm(question$Question_Response ~ as.factor(question$`Economic Class`) 
+                  + question$Gender + as.factor(question$Age_Cat))
+anova(Anova_Model_EconClass)
+```
+
+Now let's look at the combined effect.
+```{r ANOVA Education, Country, EconClass, Townsize}
+Anova_Model<- lm(question$Question_Response ~ as.factor(question$Education) + as.factor(question$Country.Code)
+                  + as.factor(question$`Economic Class`) + as.factor(question$`Town Size`) 
+                  + question$Gender + question$Age_Cat)
+anova(Anova_Model)
+```
+
+##Analysis at an Invidiual Level: ANOVA Results
+We just ran an ANOVA for a single question, now let's look at the results of 10 random questions. (Note that each questions is represented by a single varaible in this dataframe. The numbers are the same as those coded by the WVS and can be downloaded from their website.)
+```{r ANOVA for 10 Questions}
+#To combine multiple questions into a single dataframe 
+
+i = 0
+questions = c()
+Question_Anova_Model_Summary_Fvalues <- c()
+Question_Anova_Model_Summary_Pvalues <- c()
+
+for (i in 1:10){
+  column_number <- sample(1:213, 1)
+  colname <- colnames(Individual_Data_JustVariables)[column_number]
+  colname
+  questions <- c(questions,colname)
+  question <- as.data.frame(cbind(Individual_Data_Final_ANOVA[,colname], 
+                                  Individual_Data_Final_ANOVA$V2.x,
+                                  Individual_Data_Final_ANOVA$V240, 
+                                  Individual_Data_Final_ANOVA$V248,
+                                  Individual_Data_Final_ANOVA$V238,
+                                  Individual_Data_Final_ANOVA$V253,
+                                  Individual_Data_Final_ANOVA$`SD_FreeResponse$Age_Cat`))
+  
+  colnames(question)<- c("Question_Response", "Country.Code", "Gender", "Education", "Economic Class","Town Size","Age_Cat")
+  
+  Anova_Model<- lm(question$Question_Response ~ as.factor(question$Education) 
+                  + as.factor(question$Country.Code)
+                  + as.factor(question$`Economic Class`) 
+                  + as.factor(question$`Town Size`) 
+                  + question$Gender + question$Age_Cat)
+  
+  Anova_Model_Summary <- as.data.frame(anova(Anova_Model))
+  
+  Question_Anova_Model_Summary_Fvalues <- cbind(Question_Anova_Model_Summary_Fvalues, 
+                                        Anova_Model_Summary$`F value`)
+  
+  Question_Anova_Model_Summary_Pvalues <- cbind(Question_Anova_Model_Summary_Pvalues, 
+                                         Anova_Model_Summary$`Pr(>F)`)
+  i = i+1
+}
+
+Question_Anova_Model_Summary_Fvalues <- t(as.data.frame(Question_Anova_Model_Summary_Fvalues))
+#rownames(Question_Anova_Model_Summary_Fvalues) <- questions
+#colnames(Question_Anova_Model_Summary_Fvalues) <-c("Education", "Country", "Gender", 
+                                                   #"Economic Class","Town Size", "Age_Cat", "Residuals")
+
+Question_Anova_Model_Summary_Pvalues <- t(as.data.frame(Question_Anova_Model_Summary_Pvalues))
+rownames(Question_Anova_Model_Summary_Pvalues) <- questions
+colnames(Question_Anova_Model_Summary_Pvalues) <-c("Education", "Country", "Gender", 
+                                                   "Economic Class","Town Size", "Age_Cat", "Residuals")
+Question_Anova_Model_Summary_Pvalues
+```
+
+This analysis shows us that country, education, town size, economic class and age all have significant effects on the variance of the questions responses. Gender is not always, but the majority of the time. When Hofstede found similar results, he proceeded to divide his responses by occupation, in our case education and then average the subgroups to get the country score he used in his dimension calculatuion. 
+
+To replicate his steps, we would need to divide by each country into 9 subgroups divided by their education level, determine the % of people who answered in each those categories. We could then average the precentages of all the subgroups; however, since we have a nationally representative sample, where countries provided each individual a weight. Subdiving and averaging - ignoring the weights will not provide an accurate relationships
+
+##Matched Aggregates
+When Hofestede studied his data, he had a rather homogenous group. In the WVS sample, the respondants are intended to be representative of the nation in which they were sampled. Which means that diversity within the sample is similar to the diversity of the country. In order to do this for the WVS data, we need can control for the major factors - age, education, gender, socio-economic status, and town size. This makes can make for many different groups depending on how these characteristics are grouped. We then need to be able to compare the results to determine if they are showing the same results.  
+```{r Subgroup Creation}
+#need to remove the respondants who do not have data in these columns
+desiredCols <- c("V240", "V238", "V248", "V253")
+completeFun <- function(data, desiredCols) {
+  completeVec <- complete.cases(data[, desiredCols])
+  return(data[completeVec, ])
+}
+
+Individual_Data_Final_noAge <- completeFun(Individual_Data_Final_noAge, desiredCols)
+
+#Make a list of respondants who are male, unitersity educated, upper-middle class and living in a town larger than 100K
+
+Male_University_UpperMid_City <- c()
+
+for(aRow in c(1:nrow(Individual_Data_Final_noAge))){
+  if (Individual_Data_Final_noAge[aRow, "V240"]==1 &&
+      Individual_Data_Final_noAge[aRow, "V238"]==2 &&
+      (Individual_Data_Final_noAge[aRow, "V248"]==8 || Individual_Data_Final_noAge[aRow, "V248"]==9)  &&
+      (Individual_Data_Final_noAge[aRow, "V253"]==7 || Individual_Data_Final_noAge[aRow, "V253"]==8) ){
+    Male_University_UpperMid_City <- rbind(Male_University_UpperMid_City, Individual_Data_Final_noAge[aRow,])
+      } 
+  next
+}
+
+CountryCount <- length(unique(Male_University_UpperMid_City$V2.x))
+#now we have a dataframe with just males who are university education, in the upper middle class, living in a town with a population over 100K. There are only 1277 resondants who make up this group from 40 countries. Thats 1.4% of the orginal sample size.
+
+
+#from here we have to redivide the samples into ordinal and categorical and aggregate based on country. 
+Male_University_UpperMid_City_Categorical <- Male_University_UpperMid_City[,c(10,11,12:179)]
+Male_University_UpperMid_City_Ordinal <- Male_University_UpperMid_City[,c(10,11,181:222)]
+Male_University_UpperMid_City_Ordinal_5count <- Male_University_UpperMid_City[,c(10,11,2:4)]
+```
+
+```{r Format Dataframes of Subgroup}
+#Rename Weight and Country Column to match 
+colnames(Male_University_UpperMid_City_Categorical)[colnames(Male_University_UpperMid_City_Categorical)=="V2.x"] <- "V2"
+colnames(Male_University_UpperMid_City_Categorical)[colnames(Male_University_UpperMid_City_Categorical)=="V258.x"] <- "V258"
+colnames(Male_University_UpperMid_City_Ordinal)[colnames(Male_University_UpperMid_City_Ordinal)=="V2.x"] <- "V2"
+colnames(Male_University_UpperMid_City_Ordinal)[colnames(Male_University_UpperMid_City_Ordinal)=="V258.x"] <- "V258"
+colnames(Male_University_UpperMid_City_Ordinal_5count)[colnames(Male_University_UpperMid_City_Ordinal_5count)=="V2.x"] <- "V2"
+colnames(Male_University_UpperMid_City_Ordinal_5count)[colnames(Male_University_UpperMid_City_Ordinal_5count)=="V258.x"] <- "V258"
+```
+
+#Calculations for Categorical Questions - Counting
+Now the precentage of people who answered each category for each questions can be computed by nation. In this first function we are counting the number of weighted responses to each questions response. The function returns a dataframe with the number of responses for each category as a column and nations as rows. Note, the function must be used in combination with the aggregate function in order to have the rows to be nations. We show an example in question calculation before applying it to all of the WVS questions. - This is the same function as previously used.
+```{r Categorical Question Count Function}
+Count_Calc <- function(aColumn){
+  miss=0
+  r0=0
+  r1=0
+  r2=0
+  r3=0
+  r4=0
+  r5=0
+  r6=0
+  r7=0
+  r8=0
+  rneg1=0
+  rneg2=0
+  rneg6=0
+  
+  count =1
+  
+  for (value in aColumn){
+    if(is.na(value)){
+      miss = miss + 1
+      next
+    }
+    if(value == 0){
+      r0 = r0 + Updated_Categorical_data$V258[count]
+      next
+    }
+    
+    if(value == 1){
+      r1 = r1 + Updated_Categorical_data$V258[count]
+      next
+    }
+    if(value == 2){
+      r2 = r2 + Updated_Categorical_data$V258[count]
+      next
+    }
+    if(value == 3){
+      r3 = r3 + Updated_Categorical_data$V258[count]
+      next
+    }
+    if(value == 4){
+      r4 = r4 + Updated_Categorical_data$V258[count]
+      next
+    }
+    if(value == 5){
+      r5 = r5 + Updated_Categorical_data$V258[count]
+      next
+    }
+    if(value == 6){
+      r6 = r6 + Updated_Categorical_data$V258[count]
+      next
+    }
+    if(value == 7){
+      r7= r7 + Updated_Categorical_data$V258[count]
+      next
+    }
+    if(value == 8){
+      r8 = r8 + Updated_Categorical_data$V258[count]
+      next
+    }
+    if(value == -1){
+      rneg1 = rneg1 + Updated_Categorical_data$V258[count]
+      next
+    }
+    if(value == -2){
+      rneg2 = rneg2 + Updated_Categorical_data$V258[count]
+      next
+    }
+    if(value == -6){
+      rneg6 = rneg6 + Updated_Categorical_data$V258[count]
+      next
+    }
+    count = count + 1
+  }
+#NOTE: the majority questions do not have 9 categories.
+  #rneg1 represents I don't know
+  #rneg2 is a true none response or missing value
+  #rneg6 is not applicable or not asked - so it was an administrative decision to not keep the question
+
+  sumbyresponse <-rbind(r0, r1, r2, r3, r4, r5, r6, r7, r8, rneg1, rneg2, rneg6)
+return(sumbyresponse)
+}
+```
+
+#Example Categorical Question Calculation 
+Before we run the analysis on all the questions, let's look at the break down of question V60. There are only 4  categorical responses, so the 5th category should have zero responses. 
+```{r V60 Categorical Example}
+#Rename the subgroup data frame to match the function
+Updated_Categorical_data <- Male_University_UpperMid_City_Categorical
+Updated_Categorical_data <- sapply(Updated_Categorical_data, as.numeric)
+Updated_Categorical_data <- as.data.frame(Updated_Categorical_data)
+
+#The result shows the number of people (worldwide who answered category 1, 2, 3, 4)
+V60_Global <- Count_Calc(Updated_Categorical_data$V60)
+
+#The result calculates the number of people who answered category 1, 2, 3, 4 by country
+V60_Country_Breakdown <- aggregate(Updated_Categorical_data$V60, 
+          by=list(Updated_Categorical_data$V2), 
+          Count_Calc, simplify=FALSE)
+
+#Need to reformat the above output of the aggregate function - used loop below
+Question_Counts_Example <- data.frame()
+for( i in 1:60){
+ Count <- t(as.data.frame(V60_Country_Breakdown$x[i])) 
+ Question_Counts_Example  <- as.data.frame(rbind(Question_Counts_Example, Count))
+}
+row.names(Question_Counts_Example ) <- as.character(V60_Country_Breakdown$Group.1)
+
+#To calculate th precentage of people who answered each category by country. We start by summing the rows and then divide each count by the sum.
+country_sums <- as.data.frame(apply(Question_Counts_Example , 1, sum)) 
+V60_Precent <-Question_Counts_Example [1,]/country_sums$`apply(Question_Counts_Example, 1, sum)`[1]
+#V60_Precent
+```
+
+
+#Subgroup Aggregate Precentages - Categorical
+```{r Categorical Precentage Calculation}
+#Create list of questions to loop function over 
+Cat_Question_Column_Names=names(Male_University_UpperMid_City_Categorical)[c(3:170)] 
+#Create an empty list to name the count dataframes
+Cat_Question_Column_Names_Count <- c()  
+
+#Create a new variables to hold the count calculations
+for(i in 1:168){ 
+  Question_Name <- paste(Cat_Question_Column_Names[i], "Count", sep = "_")
+  Cat_Question_Column_Names_Count <- c(Cat_Question_Column_Names_Count, Question_Name)
+  }
+
+PS_Percent_Cat_data <-data.frame() 
+count = 1
+
+#Apply the Count_Calc function to all the categorical questions.
+for(col in Cat_Question_Column_Names){ #starting with first question
+    #sumbyresponse_all dataframe contains the the categories as columns 
+    #and the weighted sums for the number of people who answered in that category. 
+    sumbyresponse_all <- aggregate(Updated_Categorical_data[,col], 
+          by=list(Updated_Categorical_data$V2), 
+          Count_Calc, simplify=FALSE)
+   
+   #Reformat the sumbyresponse_all dataframe into countries as rows & columns as categories
+   Question_Counts <-data.frame()
+   for(i in 1:CountryCount){
+      Count <- t(as.data.frame(sumbyresponse_all$x[i])) 
+      Question_Counts <- as.data.frame(rbind(Question_Counts, Count))
+   }
+   row.names(Question_Counts) <- as.character(sumbyresponse_all$Group.1)
+
+   #To store the count dataframe under question name
+   assign(Cat_Question_Column_Names_Count[count], Question_Counts)
+   
+   #Add up rows to determine total number of people from each country who answered each question
+   country_sums <- as.data.frame(apply(Question_Counts, 1, sum)) 
+   precentages <-data.frame() #this dataframe will store the precentage of people who answered each category
+
+   for(i in 1:CountryCount){
+     percent <- round(Question_Counts[i,]/country_sums$`apply(Question_Counts, 1, sum)`[i]*100,3)
+     precentages <- rbind(precentages, percent)
+   }
+
+    colnames(precentages) <- c("0", "1_Ref", "2", "3", "4", "5", "6", "7", "8", "Neg1", "Missing", "AdminNA")
+    Categorical_Percentages<- precentages 
+  
+  #Need to store the precent dataframe under question name
+   colnames(Categorical_Percentages) <- paste(Cat_Question_Column_Names[count], colnames(Categorical_Percentages), sep = "_")
+   assign(Cat_Question_Column_Names[count], Categorical_Percentages)
+   count = count+1
+} #ending analysis of one question looping back to start another question
+```
+
+#Categorical Dataframes Combined
+We now will combine all the dataframes into one matirx. This data frame contains a column for each categorical response of each question for all questions. The columns are first named with the question number and then by the coded category. Not all the questions have equal number of categories which is why some questions have columns with all zeros.
+```{r List of Categorical Data}
+Cat_Precentage_DFs_list<- list(V4=V4, V5=V5, V6=V6, V7=V7, V8=V8, V9=V9, V10=V10,
+                               V11=V11, V12=V12, V13=V13, V14=V14, V15=V15, V16=V16,
+                               V17=V17, V18=V18, V19=V19, V20=V20, V21=V21, V22=V22,
+                               V25=V25, V26=V26, V27=V27, V28=V28, V29=V29, V30=V30,  
+                               V31=V31, V32=V32, V33=V33, V34=V34, V35=V35, V37=V37,
+                               V42=V42, V39=V39, V38=V38, V36=V36, V40=V40, V41=V41,
+                               V43=V43, V44=V44, V24=V24, V70=V70, V71=V71, V72=V72,
+                               V73=V73, V75=V75, V76=V76, V77=V77, V78=V78, V79=V79,
+                               V74=V74, V165=V165, V166=V166, V167=V167, 
+                               V168=V168, V169=V169,V81=V81, V82=V82, V83=V83,V45=V45,V46=V46,
+                               V102=V102, V49=V49, V54=V54, V51=V51, V52=V52, V50=V50, 
+                               V48=V48, V47=V47, V53=V53,
+                               V60=V60, V61=V61, V62=V62, V63=V63, V64=V64, 
+                               V65=V65,V66=V66, V67=V67, V68=V68, V69=V69, 
+                               V80=V80, V84=V84, V85=V85, V86=V86, V87=V87, V88=V88, V89=V89, 
+                               V108=V108, V109=V109, V110=V110, V111=V111, 
+                               V112=V112, V113=V113, V114=V114, V115=V115, 
+                               V116=V116, V117=V117, V118=V118, V119=V119,
+                               V120=V120, V121=V121, V122=V122, V123=V123, V124=V124,V126=V126,
+                               V127=V127, V128=V128, V129=V129, V130=V130, V142=V142,
+                               V225=V225, V226=V226, V227=V227,
+                               V217=V217, V218=V218, V219=V219, V220=V220, V221=V221, 
+                               V143=V143, V145=V145, V146=V146, V147=V147, V148=V148, 
+                               V149=V149, V150=V150, V151=V151, 
+                               V153=V153, V154=V154, V155=V155, V156=V156,
+                               V211=V211, V103=V103, V104=V104, V105=V105 ,V106=V106, V107=V107,
+                               V212=V212, V213=V213, V214=V214, V216=V216, V243=V243, V244=V244, V245=V245, V246=V246,
+                               V170=V170, V171=V171, V172=V172, V173=V173, V174=V174, V175=V175, V176=V176, V177=V177, 
+                               V178=V178, V179=V179, v180=V180, V181=V181, V182=V182, v183=V183, V184=V184, V185=V185, 
+                               V186=V186, V187=V187, V188=V188, V189=V189, V190=V190, V191=V191,
+                               V222=V222, V223=V223, V224= V224)
+                               
+country.codes <- sumbyresponse_all$Group.1
+
+Cat_Precentage_DFs <- cbind(V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,V20,V21,V22,V25,V26,V27,V28,
+                           V29,V30,V31,V32,V33,V34,V35,V37,V42,V39,V38,V36,V40,V41,V43,V44,V24,V70,V71,V72,V73,V75,
+                           V76, V77,V78,V79,V74,V165,V166,V167,V168,V169,V81,V82,V83,V45,V46,
+                           V102,V49,V54,V51,V52,V50,V48,V47,V53,
+                           V60,V61,V62,V63,V64,V65,V66,V67,V68,V69,V80,V84,V85,V86,V87,V88,V89,V108,V109,V110,V111,V112,
+                           V113,V114,V115,V116,V117,V118,V119,V120,V121,V122,V123,V124,V126,V127,V128,V129,V130,V142,
+                           V217,V218,V219,V220,V221,V222,V223,V224,V225,V226,V227,
+                           V143,V145,V146,V147,V148,V149,V150,V151,V153,V154,V155,V156,
+                           V211,V103,V104,V105, V106,V107,V212,V213,V214,V216,V243,V244,V245,V246,
+                           V170,V171,V172,V173,V174,V175,V176,V177,V178,V179,
+                           V180,V181,V182,V183,V184,V185,V186,V187,V188,
+                           V189,V190,V191)
+
+#Remove the columns that are just zeros. This step removes categories that were not used by questions. 
+Cat_Final_Precentage_DFs_Male<- Cat_Precentage_DFs[,-(which(colSums(Cat_Precentage_DFs, na.rm=TRUE) == 0))] 
+```
+
+
+#Calculations for Ordinal Questions
+Not all questions in the WVS have categorical responses. 51 questions ask respondants to respond on a likert scale. We first calculate the precentage of people who answered 1-10 as individual variables. Then we group responses 1-2 (Very low), 3-4 (Low), 5-6 (Neutral), 7-8 (High), 9-10 (Very High) - to make five categorical responses in order to understand the directionality of the data by adding the precentages of people who answered in these categories. 
+
+First we need to aggregate the data into weighted sums for each country. The Likert_Count_Calc function is very similar to the Count_Calc function (in fact the only difference is it hasa more categories ot count). It returns a dataframe with countries as the rows and response categories 1 to 10, -1 ("I don't know"), -2 (No answer), and -6 (AdminNA). Recall that when downloaded from the WVS wesite, this data was coded with numbers to represent the response chosen or why a response is missing. For example, -5 means missing or inapporiate response, while -4 respresents not asked in that survey.  Earlier in this process (line 121), we converted -5 (inapplicable/refused/missing), -4 (not asked in survey), and -3 (not applicable), to -6 so that they are not included in the calculation. These (-6) responses represent an administractive decision; whereas -2 is when the respondant is asked the question and chooses not to answer and -1 is when the respondant answers that they do not know.
+
+Similar to the Count_Calc function for the categorical questions. This function needs to be used with the aggregate function to separate by country and in a loop to analyze multiple questions at a time. We will start with an example using a single question (V95), then we will use a loop to apply the function to all of the ordinal questions in our data set.
+
+```{r Ordinal Questions Count Function}
+Likert_Count_Calc<- function(aColumn){
+ 
+  miss=0
+  r1=0
+  r2=0
+  r3=0
+  r4=0
+  r5=0
+  r6=0
+  r7=0
+  r8=0
+  r9=0
+  r10=0
+  rneg1=0
+  rneg2=0
+  rneg6=0
+  
+  count = 1
+  
+for (value in aColumn){
+    
+    if(is.na(value)){
+      miss = miss + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == 1){
+      r1 = r1 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == 2){
+      r2 = r2 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == 3){
+      r3 = r3 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == 4){
+      r4 = r4 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == 5){
+      r5 = r5 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == 6){
+      r6 = r6 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == 7){
+      r7 = r7 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == 8){
+      r8 = r8 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == 9){
+      r9 = r9 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == 10){
+      r10 = r10 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == -1){
+      rneg1 = rneg1 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == -2){
+      rneg2 = rneg2 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    if(value == -6){
+      rneg6 = rneg6 + Updated_Ordinal_data$V258[count]
+      next
+    }
+    count = count + 1
+  }
+  #Note that NA responses not included in subset. 
+  dataofresponses_subset<-rbind(r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, rneg1, rneg2, rneg6) 
+  
+  #each column is a response sum, each row is coutry
+  return(dataofresponses_subset)
+}
+```
+
+#Ordinal Question Count Calcuations
+To determine the precentage of people who answered each response on the likert scales, we have to apply the Liket_Count_Calc function using the aggregate function within a loop. The loop will create a dataframe for each question. THe dataframe will have the countries as rows and the questions responses as columns. In each cell are the precentage of people who answered each response.
+```{r Ordinal Percentage Calculations}
+#Rename the subgroup data frame to match the function
+Updated_Ordinal_data <- Male_University_UpperMid_City_Ordinal
+Updated_Ordinal_data <- sapply(Updated_Ordinal_data, as.numeric)
+Updated_Ordinal_data <- as.data.frame(Updated_Ordinal_data)
+
+Ordinal_Question_Column_Names = names(Male_University_UpperMid_City_Ordinal)[c(3:44)]
+Ordinal_Question_Column_Names_Count =c() #List to name the count dataframes
+count = 1
+
+for(i in 1:length(Ordinal_Question_Column_Names)){ 
+  Question_Name <- paste(Ordinal_Question_Column_Names[i], "Count", sep = "_")
+  Ordinal_Question_Column_Names_Count <- c(Ordinal_Question_Column_Names_Count, Question_Name)
+  }
+
+#Loop through every question to create a dataframe with with counts of responses
+for(col in Ordinal_Question_Column_Names){
+        dataofresponses_country_subset <- aggregate(Updated_Ordinal_data[,col], 
+                                   by=list(Updated_Ordinal_data$V2), 
+                                   Likert_Count_Calc, simplify=FALSE)
+        
+#Reformat the dataframe into countries as rows and columns as categories
+   Ordinal_Question_Counts <-data.frame()
+   for(i in 1:CountryCount){
+      Count <- t(as.data.frame(dataofresponses_country_subset$x[i])) 
+      Ordinal_Question_Counts <- rbind(Ordinal_Question_Counts, Count)
+   }
+   row.names(Ordinal_Question_Counts) <- as.character(dataofresponses_country_subset$Group.1)
+   
+   #Add up rows to determine total number of people from each country who answered each question
+   Ordinal_country_sums<- as.data.frame(apply(Ordinal_Question_Counts, 1, sum)) 
+   
+   #To store the count dataframe under question name
+   assign(Ordinal_Question_Column_Names_Count[count], Ordinal_Question_Counts)
+   
+   #To calculate the precentages
+   precentages<-data.frame() #this dataframe will store the precentage of people who answered each category
+
+   for(i in 1:CountryCount){
+     percent <- round(Ordinal_Question_Counts[i,]/Ordinal_country_sums$`apply(Ordinal_Question_Counts, 1, sum)`[i]*100,3)
+     precentages <- rbind(precentages, percent)
+   }
+
+   Ordinal_Percentages<- precentages 
+  
+  #Need to store the precent dataframe under question name
+   colnames(Ordinal_Percentages) <- paste(Ordinal_Question_Column_Names[count], colnames(Ordinal_Percentages), sep = "_")
+   assign(Ordinal_Question_Column_Names[count], Ordinal_Percentages)
+   count = count + 1
+}#ending for loop to start a new question 
+```
+
+To add the sum columns for all the ordinal questions, we will use a loop that sums the corresponding columns to create a new category for each question. THe loop will create new dataframes that are titled with the questions number and then the word "category" to indicate the question has been grouped into categories.
+```{r}
+count = 1
+Ordinal_df <- list(V23,V56,V55,V157,V158,V159,V160,V164,V59,V95,V96,V97,V98,V99,
+                   V100,V101,V131,V132,V134,V135,V136,
+                   V137,V138,V141,V192,V194,V197,V198,V200,V209,V210,V199,V201,V202,V203,
+                   V204,V205,V207,V206, V208,V195,V196)
+
+#Sum responses to make into categories
+sumNA <- function(x){sum(x,na.rm=TRUE)}
+
+Ordinal_Question_Category =c() #List to name the category dataframes
+
+for(i in 1:length(Ordinal_df)){ 
+  Question_Name <- paste(Ordinal_Question_Column_Names[i], "Category", sep = "_")
+  Ordinal_Question_Category <- c(Ordinal_Question_Category, Question_Name)
+}
+
+for(df in Ordinal_df){
+  VLow<-as.data.frame(apply(df[,c(1:2)],1,sumNA))
+  Low<-as.data.frame(apply(df[,c(3:4)],1,sumNA))
+  Med<-as.data.frame(apply(df[,c(5:6)],1,sumNA))
+  High<-as.data.frame(apply(df[,c(7:8)],1,sumNA))
+  VHigh<-as.data.frame(apply(df[,c(9:10)],1,sumNA))
+  DontKnow <- df[,11]
+  Missing <-df[,12]
+  NA_Admin <- df[,13]
+
+Categorized <-cbind(VLow, Low, Med, High, VHigh, DontKnow, Missing, NA_Admin)
+colnames(Categorized) <- c("Very Low_Ref", "Low", "Med", "High", " Very High", "Dont Know", "Missing", "NA_Admin")
+colnames(Categorized) <- paste(Ordinal_Question_Column_Names[count], colnames(Categorized), sep = "_")
+assign(Ordinal_Question_Category[count], Categorized)
+count=count+1
+}
+```
+
+#5 Item Likert Scale
+There are three (V161,V162, V163) questions which are on a 1-5 scale. Since they are already divided into 5 categories, these questions had to be condensed into three cateogies. The three categories are Low (1-2), Neutral (3), High (4-5). 
+```{r V161}
+#V161
+V161_Counts <- data.frame()
+V161_Country_Breakdown<- aggregate(as.numeric(Male_University_UpperMid_City_Ordinal_5count$V161), 
+          by=list(Male_University_UpperMid_City_Ordinal_5count$V2), 
+          Count_Calc, simplify=FALSE)
+
+for( i in 1:CountryCount){
+ Count <- t(as.data.frame(V161_Country_Breakdown$x[i])) 
+ V161_Counts<- as.data.frame(rbind(V161_Counts, Count))
+}
+
+row.names(V161_Counts) <- as.character(V161_Country_Breakdown$Group.1)
+country_sums <- as.data.frame(apply(V161_Counts, 1, sum)) 
+
+V161_Precent <- data.frame()
+
+for(i in 1:CountryCount){
+  Precent <- V161_Counts[i,]/country_sums$`apply(V161_Counts, 1, sum)`[i]
+  V161_Precent <- rbind(V161_Precent, Precent)
+}
+#Sum responses 1-2, 3, and 4-5
+sumNA <- function(x){sum(x,na.rm=TRUE)}
+
+#VLow_V161 <-V161_Precent[,1]*100
+Low_V161 <- as.data.frame(apply(V161_Precent[,c(1:2)],1,sumNA)*100)
+Med_V161 <-V161_Precent[,3]*100
+High_V161 <-as.data.frame(apply(V161_Precent[,c(4:5)],1,sumNA)*100)
+#VHigh_V161 <-V161_Precent[,5]*100
+DontKnow <- V161_Precent[,10]*100
+Missing <-V161_Precent[,11]*100
+NA_Admin <- V161_Precent[,12]*100
+
+V161_Categorized <-cbind(Low_V161, Med_V161, High_V161, DontKnow, Missing, NA_Admin)
+colnames(V161_Categorized) <- c("V161_Low_Ref", "V161_Med", "V161_High", "V161_Dont Know", "V161_Missing", "V161_NA_Admin")
+```
+
+
+```{r V162}
+V162_Counts <- data.frame()
+V162_Country_Breakdown<- aggregate(as.numeric(Male_University_UpperMid_City_Ordinal_5count$V162), 
+          by=list(Male_University_UpperMid_City_Ordinal_5count$V2), 
+          Count_Calc, simplify=FALSE)
+for( i in 1:CountryCount){
+ Count <- t(as.data.frame(V162_Country_Breakdown$x[i])) 
+ V162_Counts<- as.data.frame(rbind(V162_Counts, Count))
+}
+row.names(V162_Counts) <- as.character(V162_Country_Breakdown$Group.1)
+country_sums <- as.data.frame(apply(V162_Counts, 1, sum)) 
+
+V162_Precent <- data.frame()
+for(i in 1:CountryCount){
+  Precent <- V162_Counts[i,]/country_sums$`apply(V162_Counts, 1, sum)`[i]
+  V162_Precent <- rbind(V162_Precent, Precent)
+}
+
+#Sum responses 1-2, 3, and 4-5
+sumNA <- function(x){sum(x,na.rm=TRUE)}
+
+#VLow_V162 <-V162_Precent[,1]*100
+Low_V162 <- as.data.frame(apply(V162_Precent[,c(1:2)],1,sumNA)*100)
+Med_V162 <-V162_Precent[,3]*100
+High_V162 <-as.data.frame(apply(V162_Precent[,c(4:5)],1,sumNA)*100)
+#VHigh_V162 <-V162_Precent[,5]*100
+DontKnow <- V162_Precent[,10]*100
+Missing <-V162_Precent[,11]*100
+NA_Admin <- V162_Precent[,12]*100
+
+V162_Categorized <-cbind(Low_V162, Med_V162, High_V162, DontKnow, Missing, NA_Admin)
+colnames(V162_Categorized) <- c("V162_Low_Ref", "V162_Med", "V162_High", "V162_Dont Know", "V162_Missing", "V162_NA_Admin")
+```
+
+
+```{r V163}
+V163_Counts <- data.frame()
+V163_Country_Breakdown<- aggregate(as.numeric(Male_University_UpperMid_City_Ordinal_5count$V163), 
+          by=list(Male_University_UpperMid_City_Ordinal_5count$V2), 
+         Count_Calc, simplify=FALSE)
+for( i in 1:CountryCount){
+ Count <- t(as.data.frame(V163_Country_Breakdown$x[i])) 
+ V163_Counts<- as.data.frame(rbind(V163_Counts, Count))
+}
+row.names(V163_Counts) <- as.character(V163_Country_Breakdown$Group.1)
+country_sums <- as.data.frame(apply(V163_Counts, 1, sum)) 
+
+V163_Precent <- data.frame()
+for(i in 1:CountryCount){
+  Precent <- V163_Counts[i,]/country_sums$`apply(V163_Counts, 1, sum)`[i]
+  V163_Precent <- rbind(V163_Precent, Precent)
+}
+
+#Sum responses 1-2, 3, and 4-5
+sumNA <- function(x){sum(x,na.rm=TRUE)}
+
+#VLow_V163 <-V163_Precent[,1]*100
+Low_V163 <- as.data.frame(apply(V163_Precent[,c(1:2)],1,sumNA)*100)
+Med_V163 <-V163_Precent[,3]*100
+High_V163 <-as.data.frame(apply(V163_Precent[,c(4:5)],1,sumNA)*100)
+#VHigh_V163 <-V163_Precent[,5]*100
+DontKnow <- V163_Precent[,10]*100
+Missing <-V163_Precent[,11]*100
+NA_Admin <- V163_Precent[,12]*100
+
+V163_Categorized <-cbind(Low_V163, Med_V163, High_V163,DontKnow, Missing, NA_Admin)
+colnames(V163_Categorized) <- c("V163_Low_Ref", "V163_Med", "V163_High", "V163_Dont Know", "V163_Missing", "V163_NA_Admin")
+```
+
+```{r Combine 5Likert Scale Questions}
+PFL_5Scale_Cat <- as.data.frame(cbind(V161_Categorized, V162_Categorized, V163_Categorized))
+row.names(PFL_5Scale_Cat) <- row.names(V163_Counts)
+```
+
+#Combining Ordinal Dataframe
+We need to combine the categorized ordinal variables into one data frame. We have to add the 5item Likert scale - later because it is a differnt size than the other dataframes. There should be 45 Ordinal + 3 5pt Ordinal - missing some...
+
+```{r List of Ordinal Dataframes}
+Ordinal_Precentage_DFs_list <-list(V23_Category,
+                                   V56_Category,V55_Category,V157_Category,V158_Category,V159_Category,
+                                   V160_Category,V164_Category,V59_Category,V95_Category,V96_Category,V97_Category,
+                                   V98_Category,V99_Category,V100_Category,V101_Category,V131_Category,V132_Category,
+                                   V134_Category,V135_Category,V136_Category,V137_Category,V138_Category,
+                                   V141_Category,V192_Category,V194_Category,
+                                   V197_Category,V198_Category,V200_Category,V209_Category,
+                                   V210_Category,V199_Category,V201_Category,V202_Category,V203_Category,
+                                   V204_Category,V205_Category,V207_Category, V206_Category, 
+                                   V208_Category, V195_Category, V196_Category )
+
+Ordinal_Final_Precentage_DFs <- cbind(V23_Category,
+                                   V56_Category,V55_Category,V157_Category,V158_Category,V159_Category,
+                                   V160_Category,V164_Category,
+                                   V59_Category,V95_Category,V96_Category,V97_Category,
+                                   V98_Category,V99_Category,V100_Category,V101_Category,
+                                   V131_Category,V132_Category,
+                                   V134_Category,V135_Category,V136_Category,V137_Category,V138_Category,
+                                   V141_Category,V192_Category,V194_Category,
+                                   V197_Category,V198_Category,V200_Category,V209_Category,
+                                   V210_Category,V199_Category,V201_Category,V202_Category,V203_Category,
+                                   V204_Category,V205_Category,V207_Category, V206_Category, V208_Category,
+                                   V195_Category, V196_Category )
+```
+
+```{r Updated Combined Dataframe After Sensitivity Analysis}
+#This step removes questions from sensitivity analysis above
+#Categorical Questions: V74B, V90,V91,V92,V93,V94,
+#                       V160A,V160B,V160C,V160D,V160E,V160F,V160G,V160H,V160I,V160J,
+#                       V217_ESMA,V218_ESMA,V224_ESMA,V220_ESMA,V221_ESMA,V222_ESMA,
+#                       V228A,V228B,V228C,V228D,V228E,V228F,V228G,V228H,V228I,V228J,V228K,
+#                       V243_AU,V244_AU,
+#Oridal Questions:V133,V140,V193,V152,V56_NZ,V203A,V207A
+#This should leave 168 Categorical Questions and 45 Ordinal Questions. 
+
+Cat_Precentage_DFs <- cbind(V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,
+                           V20,V21,V22,V25,V26,V27,V28,
+                           V29,V30,V31,V32,V33,V34,V35,V37,V42,V39,V38,V36,
+                           V40,V41,V43,V44,V24,
+                           V70,V71,V72,V73,V75,V76, V77,V78,V79,V74,
+                           V165,V166,V167,V168,V169,
+                           V81,V82,V83,
+                           V45,V46,
+                           V102,V105,
+                           V49,V54,V51,V52,V50,V48,V47,V53,
+                           V60,V61,V62,V63,V64,V65,V66,V67,V68,V69,
+                           V80,V84,V85,V86,V87,V88,V89,
+                           V108,V109,V110,V111,V112,
+                           V113,V114,V115,V116,V117,V118,V119,
+                           V120,V121,V122,V123,V124,V126,V127,V128,V129,V130,
+                           V142,
+                           V217,V218,V219,V220,V221,V222,V223,V224,V225,V226,V227,
+                           V143,V145,V146,V147,V148,V149,
+                           V150,V151,V153,V154,V155,V156,
+                           V211,V103,V104,V106,V107,V212,V213,V214,V216,
+                           V243,V244,V245,V246,
+                           V170,V171,V172,V173,V174,V175,V176,V177,V178,V179,
+                           V180,V181,V182,V183,V184,V185,V186,V187,V188,
+                           V189,V190,V191)
+
+
+Cat_Question_Count <- list(V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,
+                           V20,V21,V22,V25,V26,V27,V28,
+                           V29,V30,V31,V32,V33,V34,V35,V37,V42,V39,V38,V36,
+                           V40,V41,V43,V44,V24,
+                           V70,V71,V72,V73,V75,V76, V77,V78,V79,V74,
+                           V165,V166,V167,V168,V169,
+                           V81,V82,V83,
+                           V45,V46,
+                           V102,V105,
+                           V49,V54,V51,V52,V50,V48,V47,V53,
+                           V60,V61,V62,V63,V64,V65,V66,V67,V68,V69,
+                           V80,V84,V85,V86,V87,V88,V89,
+                           V108,V109,V110,V111,V112,
+                           V113,V114,V115,V116,V117,V118,V119,
+                           V120,V121,V122,V123,V124,V126,V127,V128,V129,V130,
+                           V142,
+                           V217,V218,V219,V220,V221,V222,V223,V224,V225,V226,V227,
+                           V143,V145,V146,V147,V148,V149,
+                           V150,V151,V153,V154,V155,V156,
+                           V211,V103,V104,V106,V107,V212,V213,V214,V216,
+                           V243,V244,V245,V246,
+                           V170,V171,V172,V173,V174,V175,V176,V177,V178,V179,
+                           V180,V181,V182,V183,V184,V185,V186,V187,V188,
+                           V189,V190,V191)
+
+#Remove the columns that are just zeros. This step removes categories that were not used by questions. 
+Cat_Final_Precentage_DFs<- Cat_Precentage_DFs[,-(which(colSums(Cat_Precentage_DFs, na.rm=TRUE) == 0))] 
+
+Ordinal_Final_Precentage_DFs <- cbind(V23_Category,
+                                   V56_Category,V55_Category,V157_Category,V158_Category,V159_Category,
+                                   V160_Category,V164_Category,V59_Category,V95_Category,V96_Category,V97_Category,
+                                   V98_Category,V99_Category,V100_Category,V101_Category,V131_Category,V132_Category,
+                                   V134_Category,V135_Category,V136_Category,V137_Category,V138_Category,
+                                   V141_Category,V192_Category,V194_Category,
+                                   V197_Category,V198_Category,V200_Category,V209_Category,
+                                   V210_Category,V199_Category,V201_Category,V202_Category,V203_Category,
+                                   V204_Category,V205_Category,V207_Category, V206_Category,V208_Category,
+                                   V195_Category, V196_Category,
+                                   PFL_5Scale_Cat)
+
+Oridnal_Question_Count <- list(V23_Category,
+                                   V56_Category,V55_Category,V157_Category,V158_Category,V159_Category,
+                                   V160_Category,V164_Category,V59_Category,V95_Category,V96_Category,V97_Category,
+                                   V98_Category,V99_Category,V100_Category,V101_Category,V131_Category,V132_Category,
+                                   V134_Category,V135_Category,V136_Category,V137_Category,V138_Category,
+                                   V141_Category,V192_Category,V194_Category,
+                                   V197_Category,V198_Category,V200_Category,V209_Category,
+                                   V210_Category,V199_Category,V201_Category,V202_Category,V203_Category,
+                                   V204_Category,V205_Category,V207_Category, V206_Category,V208_Category,
+                                   V195_Category,V196_Category,
+                                   PFL_5Scale_Cat)
+length(Cat_Question_Count)
+length(Oridnal_Question_Count)
+
+Cleaned_Categorical_Ordinal_Data <- cbind(Cat_Final_Precentage_DFs,Ordinal_Final_Precentage_DFs)
+
+#Now that we have completed the sensitiviy analysis we need to remove all the "AdminNA" Columns
+WVS_Data_Precentages1<- Cleaned_Categorical_Ordinal_Data[, -grep("Admin", colnames(Cleaned_Categorical_Ordinal_Data))]
+
+#Now that we have completed the sensitiviy analysis we need to remove all the "Missing" Columns
+WVS_Data_Precentages2<- WVS_Data_Precentages1[, -grep("Missing", colnames(WVS_Data_Precentages1))]
+
+#Now that we have completed the sensitiviy analysis we need to remove all the "Neg1" Columns
+#WVS_Data_Precentages3<- WVS_Data_Precentages2[, -grep("Neg1", colnames(WVS_Data_Precentages2))]
+WVS_Data_Precentages4<- WVS_Data_Precentages2[, -grep("Know", colnames(WVS_Data_Precentages2))]
+
+#These are the "no" side of the binary variable
+BinaryQuestions_RemoveVarible <- colnames(WVS_Data_Precentages4[,c("V12_2","V13_2", "V14_2", "V15_2", 
+                                                       "V16_2", "V17_2", "V18_2", 
+                                                       "V19_2",  "V20_2", "V21_2", 
+                                                       "V22_2", "V36_2", "V37_2", 
+                                                       "V38_2",  "V39_2", "V40_2", 
+                                                       "V41_2",  "V42_2", "V43_2", 
+                                                       "V44_2", "V24_2", "V66_2",
+                                                       "V82_2","V83_2","V148_2","V149_2",
+                                                       "V176_5", "V177_5",
+                                                       "V178_5","V179_5","V180_5","V187_2","V243_2",
+                                                       "V244_2","V245_2", "V246_2")])
+                                         
+                                    
+WVS_Data_Precentages5 <- WVS_Data_Precentages4[,!colnames(WVS_Data_Precentages4) %in% BinaryQuestions_RemoveVarible] 
+```
+
+After that we will on a PCA, to see if the variables load more clearly on the dimensions. We can use the same variable reduction methods as we did on the entire sample if neccessary. I'd start with the variables that have significant kendall correlations to variables outside its own question and then reduce down to one variable per question. Test out varimax and oblimin rotations to determine if they improve the interpretations. 
+
+
+#Prinicple Component Analysis
+The goal of principle component analysis is to reduce a set of correlated variables to a smaller number of uncorrelated varaibles.The goal is create a new set of varaibles that accounts for as much variability as possible. These principle components are linear combinations of the previous variables.Therefore, each component has a loading from the variables it is made up of.  
+
+When running a principle component analysis, either the correlation or covariance matrix can be used. the correlation matrix is primarily used when the data is on different scales. Since all the data is on a 0 to 100 scale, either correlation or covariance can be used. However, there must be more observations than variables to use the princomp function of R. Since our dataframe has more variables than observations, we sue the prcomp function which uses singular value decomposition to determine the components.
+
+More details: 
+http://www.sthda.com/english/wiki/principal-component-analysis-in-r-prcomp-vs-princomp-r-software-and-data-mining
+ 
+```{r PCA Analysis}
+Explore_5 <- na.omit(t(WVS_Data_Precentages5))
+PCA_Analysis <-prcomp(t(Explore_5))
+summary(PCA_Analysis)
+```
+
+```{r Scree Plot}
+plot(PCA_Analysis, main = "ScreePlot", type = "l")
+abline(h=2500, col="red")
+```
+
+#PCA Result Analysis
+```{r PCA Scores}
+#Scores have countries as rows
+PCA_Scores <- PCA_Analysis$x[,c(1:5)]
+rownames(PCA_Scores) <- rownames(t(Explore_5))
+head(PCA_Scores)
+```
+
+```{r PCA Rotations}
+#install.packages("GPArotation")
+library(GPArotation)
+
+plot(PCA_Analysis$rotation [,c(1:2)], xlim = c(-1, 1), ylim = c(-1, 1), main = "Unrotated Loadings")
+abline(v = 0, h = 0, lty = 2)
+
+plot(varimax(PCA_Analysis$rotation [,c(1:2)])$loadings, xlim = c(-1, 1), ylim = c(-1, 1), main = "Varimax Rotated Loadings")
+abline(v = 0, h = 0, lty = 2)
+
+plot(oblimin(PCA_Analysis$rotation [,c(1:2)])$loadings, xlim = c(-1, 1), ylim = c(-1, 1), main = "Oblimin Rotated Loadings")
+abline(v = 0, h = 0, lty = 2)
+
+#the points in the graph represent how each variable weighs on the first two dimensions. The two clusters indicated that there are two groups of variables that load in similar ways on to these components.
+```
+
+##Varaible Reduction: Kendall Rank Correlations
+
+Similar to the aggregate data, we did not see clear trends when all the variables were included. Therefore, we choose to reduce the variables using Kendall Rank Correlations, similar to Hofstede.  The Kendall Rank correlation is based on discordant and concordant pairs and ties between the rankings result in a slightly different calculation of tau which is based on the difference between concordant and discordant pairs divided by the square root of the product of the difference between the unique ordered pairs and the tied rank in both set of variables. It is considered to be more resistant to error and better for smaller sample sizes. See article by Puth et al.
+
+```{r Kendall Rank Correlations}
+Kendall_Correlations <- cor(WVS_Data_Precentages5, method = "kendall")
+Kendall_Correlations <- as.data.frame(Kendall_Correlations)
+Kendall_Correlations[abs(Kendall_Correlations) < 0.7] = NA
+
+#remove columns/rows which sum to 1 - because that implies that only correlate with themselves at 0.7 or higher
+Kendall_Correlations_NoCorr<- Kendall_Correlations[,-(which(colSums(Kendall_Correlations, na.rm=TRUE) == 1.00))] 
+
+#the list below is the variables to keep
+Correlated_Variables <- names(Kendall_Correlations_NoCorr)
+str(Correlated_Variables)
+
+#There are 573 varaibles that do not correlate with anything else above 0.7. They are removed from the analysis. 
+Kendall_Correlations_0.7Corr<- Kendall_Correlations[Correlated_Variables, Correlated_Variables]
+diag(Kendall_Correlations_0.7Corr) = NA
+
+#Now we want to only keep variables which have signifcant correlations beyond other variables in their question. We can do this by summing each row - excluding the variables related to the same question
+```
+
+From this plot it is still hard tell which correlations are outside the question. We will now remove all inter question correlations and test to see if the correlations that do result are statiscally significant
+```{r Remove Variable Correlations with Question}
+#we want to keep all variables with correlations (outside it's own question) in the PCA analysis. Correlations between varaibles of the same question are an artifact of the research design. 
+
+Eliminate_Kendall <- c("V4_","V4_", "V8_","V8_","V9_","V9_",
+                       "V10_","V10_","V25_","V25_","V26_","V26_",
+                       "V27_","V27_","V29_","V29_","V32_","V32_",
+                       "V33_","V33_","V34_","V34_","V81_","V81_",
+                       "V45_","V45_","V51_","V53_","V68_","V68_",
+                       "V110_","V111_","V130_","V130_","V225_","V225_",
+                       "V145_","V146_","V147_","V147_",
+                       "V150_","V150_","V150_","V150_",
+                       "V151_","V151_","V151_","V151_",
+                       "V211_","V211_","V181_","V182_",  
+                       "V183_","V183_","V184_","V184_","V188_","V188_",
+                       "V190_","V190_","V203_", "V203_")
+
+Keep <- c()
+i=1
+for (aRow in Correlated_Variables[c(1:58)]){
+  DF <- abs(Kendall_Correlations_0.7Corr[ , -grep(Eliminate_Kendall[i], colnames(Kendall_Correlations_0.7Corr))])
+  sum <- sum((DF[aRow,]), na.rm=T)
+  if(sum>0){Keep <- cbind(Keep, aRow)} #if sum of row is greater than 0, keep the row.
+  if(is.na(sum==T)){next}
+  i=i+1
+}
+Keep <- c(Keep[1,])
+str(Keep)
+
+#There are 40 varaibles that do not correlate with anything else or only  correclated to other variables within the same question. They are removed from the analysis, leaving 19 variables. 
+WVS_Data_Precentages5_0.7Corr<- WVS_Data_Precentages5[,Keep]
+Kendall_Correlations_0.7Corr_Reduced<- Kendall_Correlations[Keep, Keep]
+
+#now we need ensure that all these correlations (outside the variable questions to one another) are significant
+Result <- c()
+Sig_Correlations <- c()
+
+#while we know that there are 19 variables which have correlations greater than 0.7 with variables outside their own question, we recreate the orginal dataframes from the last loop in order to do a significance test. 
+
+for(aRow in c(1:62)){
+  DF <- Kendall_Correlations_0.7Corr[ , -grep(Eliminate_Kendall[aRow], colnames(Kendall_Correlations_0.7Corr))]
+  Cell <- ncol(DF)
+  i=1
+#change this to referring to column/row name so that I make sure it's the right one. 
+  for(i in c(1:Cell)){ #looping through each one of the columns in DF
+    if (is.na(DF[aRow,i]) == FALSE) { #if the correlation exists, or the logical arguement is false, then run a correlation test)
+      j <- colnames(DF[i])
+      k <- rownames(DF[aRow,])
+      #performing a correlation test between a row and a column - need to make sure it doesn't compare to itself
+      Correlation_Test <- cor.test(WVS_Data_Precentages5[,k], WVS_Data_Precentages5[,j], method = "kendall")
+      P_Values <- Correlation_Test$p.value
+      R_squared <- DF[k,j]
+      Result <- cbind(rownames(DF[k,]), colnames(DF[j]), R_squared, P_Values)
+      Sig_Correlations <- rbind(Sig_Correlations, Result)
+    }
+    Result<- c()
+  }
+}
+
+dim(Sig_Correlations)
+
+#now we should delete any rows which have non-significant p-values
+Sig_Correlations_Clean <- Sig_Correlations[!(as.numeric(Sig_Correlations[,4]) > 0.05),]
+```
+
+
+All the 140 variables have significante (>0.05) p-values for their correlations. Now let's see how this reduced set of variables does in a PCA.
+```{r KendallPCA}
+WVS_Data_Precentages5_Kendall <- WVS_Data_Precentages5[,Keep]
+ 
+Kendall_PCA <- prcomp(WVS_Data_Precentages5_Kendall)
+summary(Kendall_PCA)
+plot(Kendall_PCA, type = "l")
+```
+
+```{r Kendall PCA Variable Factor Map}
+PCA(WVS_Data_Precentages5_Kendall)
+```
+
+#Varaible Reduction: Kendall Rank Correlations - PCA Loadings
+```{r KendallPCA Loadings}
+#Loadings have variables as rows
+KendallPCA_Loadings <- round(Kendall_PCA$rotation [,c(1:5)], 3)
+KendallPCA_Loadings <- as.data.frame(KendallPCA_Loadings)
+
+par(mfrow=c(2,3))
+
+plot(KendallPCA_Loadings$PC1, type = "l", main = "PC1")
+abline(h=0.05, col="red")
+abline(h=-0.05, col="red")
+abline(h=0.075, col="grey")
+abline(h=-0.075, col="grey")
+abline(h=0.1, col="blue")
+abline(h=-0.1, col="blue")
+
+plot(KendallPCA_Loadings$PC2, type = "l", main = "PC2")
+abline(h=0.05, col="red")
+abline(h=-0.05, col="red")
+abline(h=0.075, col="grey")
+abline(h=-0.075, col="grey")
+abline(h=0.1, col="blue")
+abline(h=-0.1, col="blue")
+
+plot(KendallPCA_Loadings$PC3, type = "l", main = "PC3")
+abline(h=0.05, col="red")
+abline(h=-0.05, col="red")
+abline(h=0.075, col="grey")
+abline(h=-0.075, col="grey")
+abline(h=0.1, col="blue")
+abline(h=-0.1, col="blue")
+
+plot(KendallPCA_Loadings$PC4, type = "l", main = "PC4")
+abline(h=0.05, col="red")
+abline(h=-0.05, col="red")
+abline(h=0.075, col="grey")
+abline(h=-0.075, col="grey")
+abline(h=0.1, col="blue")
+abline(h=-0.1, col="blue")
+
+plot(KendallPCA_Loadings$PC5, type = "l", main = "PC5")
+abline(h=0.05, col="red")
+abline(h=-0.05, col="red")
+abline(h=0.075, col="grey")
+abline(h=-0.075, col="grey")
+abline(h=0.1, col="blue")
+abline(h=-0.1, col="blue")
+```
+
+
+```{r KendallPCA Rotations}
+plot(KendallPCA_Loadings[,c(1,2)], xlim = c(-1, 1), ylim = c(-1, 1), main = "Unrotated Reduced Kendall Loadings")
+abline(v = 0, h = 0, lty = 2)
+
+Kendall.Varimax <-varimax(Kendall_PCA$rotation)
+#try regressions with national data and then try to reduce the sample to older, educated, males - see if that helps clarify results.
+Kendall.Varimax.Loadings <- Kendall.Varimax$loadings[,c(1:6)]
+
+plot(Kendall.Varimax.Loadings[,c(1,2)], xlim = c(-1, 1), ylim = c(-1, 1), main = "Varimax Reduced Kendall Loadings")
+abline(v = 0, h = 0, lty = 2)
+
+Kendall.Oblimin <- oblimin(Kendall_PCA$rotation)
+Kendall.Oblimin.Loadings <- Kendall.Oblimin$loadings
+
+plot(Kendall.Oblimin.Loadings[,c(1,2)], xlim = c(-1, 1), ylim = c(-1, 1), main = "Oblimin Loadings")
+abline(v = 0, h = 0, lty = 2)
+```
+
+We can add the descriptions to get a sense of what the components are describing.
+```{r KendallPCA Descriptions }
+Kendall.Correlation.Variable.Descriptions <- read.csv("Kendall_Correlation_Variable_Descriptions.csv")
+
+V1_Names <- merge(Sig_Correlations_Clean, Kendall.Correlation.Variable.Descriptions, by.x = "V1", by.y = "VariablestoKeep")
+
+V1_Names <- V1_Names[c("V1", "Description", "R_squared", "V2")]
+V2_Names <- merge(V1_Names, Kendall.Correlation.Variable.Descriptions, by.x = "V2", by.y = "VariablestoKeep")
+V2_Names <- V2_Names[c("V1", "Description.x", "R_squared", "V2", "Description.y")]
+
+Kendall_PCA_Loadings_Description <- merge(KendallPCA_Loadings ,
+                                     Kendall.Correlation.Variable.Descriptions, by.x = 0,
+                                     by.y = "VariablestoKeep" )
+
+Kendall_PCA_Loadings_Description<-  Kendall_PCA_Loadings_Description[,c("Row.names", "Description", 
+                                                               "PC1", "PC2", "PC3", "PC4", "PC4")]
+```
+
+##Analysis at an Invidiual Level: Variable Reduction at Indvidual Level - NOT COMPLETE
+Another option is to using the data at the individual level.  We could use a nominal logistic model to estimate factors of categorical varaibles. First developed by Bock, the nominal model is accessible for large datasets through the MIRT package and mirt function in R (developed by Phil Chalmers). This anlaysis is shown in another R file. It has been able to extract 1 and 2 factor models and is currently working on a  three factor model.
+
