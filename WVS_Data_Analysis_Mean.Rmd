@@ -1,0 +1,1786 @@
+---
+title: "WVS_Data_Analysis_Median"
+author: "Leigh Allison"
+date: "March 3, 2018"
+output: html_document
+---
+First we need to tell R where are the data files are stored. 
+```{r Set Workspace}
+setwd("C:/Users/laall/Desktop/GitHub/WVS_Analysis_Leigh_Allison")
+```
+
+```{r Install Packages, warning=FALSE}
+#install.packages("FactoMineR")
+library("FactoMineR")
+
+#install.packages("ltm")
+library("ltm")
+
+#install.packages("lessR")
+#install.packages("devtools")
+library("lessR")
+library("devtools")
+
+#install.packages("stats4")
+library("stats4")
+
+#install.packages("lattice")
+library("lattice")
+
+
+#install.packages("psych")
+library("psych")
+
+#install.packages("stats")
+library("stats")
+
+#install.packages('Rcpp')
+library("Rcpp")
+
+#install.packages("permute")
+library(permute)
+
+#install_github('philchalmers/mirt')
+library("mirt")
+
+#install.packages("car", repos = 'http://cran.us.r-project.org')
+library(car)
+```
+
+Load the data file. This dataframe contains questions as single columns and the rows are respondants. There is one column which identifies the respondants country and one column with a weight value to represent the respondants representativeness with respet to the entire country and sample dataset. We have already removed questions that had large amount of missing values. Remaining missing values are recoded as NA and should not affect the analysis. 
+```{r Load data}
+#Load all the data
+Individual_Data <- read.csv("Individual_Data_FINAL.csv")
+
+RecodetoNA<- function(QuestionColName){
+  QuestionColName<- recode(QuestionColName, "c(-1,-2,-6) = NA")
+}
+Individual_Data  <- as.data.frame(apply(Individual_Data ,2,RecodetoNA))
+#Separate the data into Ordered, dichotomous, and Nominal/Categorical
+
+Dichotomous_Individual_Data <- Individual_Data[,c("V2.x","V258.x","V12","V13", "V14", "V15", 
+                                                       "V16", "V17", "V18", 
+                                                       "V19",  "V20", "V21", 
+                                                       "V22", "V24",
+                                                       "V36","V37","V38","V39", "V40", 
+                                                       "V41","V42","V43","V44", 
+                                                       "V66",
+                                                       "V82","V83","V148","V149",
+                                                       "V176", "V177",
+                                                       "V178","V179","V180","V187","V243",
+                                                       "V244","V245", "V246")]
+
+Nominal_Individual_Data <- Individual_Data[,c("V2.x","V258.x",
+                                              "V25", "V26","V27", "V28","V29", "V30",
+                                              "V31", "V32","V33", "V34","V35",
+                                              "V60","V61","V62","V63","V64","V65",
+                                                                   "V80","V81","V147","V150","V151")]
+
+
+Ordered_Individual_Data <- Individual_Data[,!colnames(Individual_Data) %in% c("V12","V13", "V14", "V15", 
+                                                       "V16", "V17", "V18", 
+                                                       "V19",  "V20", "V21", 
+                                                       "V22", "V24",
+                                                       "V36","V37","V38","V39", "V40", 
+                                                       "V41","V42","V43","V44", 
+                                                       "V66",
+                                                       "V82","V83","V148","V149",
+                                                       "V176", "V177",
+                                                       "V178","V179","V180","V187","V243",
+                                                       "V244","V245", "V246",
+                                                       "V25", "V26","V27", "V28","V29", "V30",
+                                              "V31", "V32","V33", "V34","V35",
+                                               "V60","V61","V62","V63","V64","V65",
+                                                                   "V80","V81","V147","V150","V151",
+                                               "X", "V2.x","V258.x")]
+#reorder the columns to put country code and weight first
+Ordered_Individual_Data <- cbind(Individual_Data$V2.x,Individual_Data$V258.x,Ordered_Individual_Data)
+
+names(Ordered_Individual_Data)[names(Ordered_Individual_Data) == 'Individual_Data$V2.x'] <- 'V2.x'
+names(Ordered_Individual_Data)[names(Ordered_Individual_Data) == 'Individual_Data$V258.x'] <- 'V258.x'
+
+Country_Codes <- unique(Individual_Data$V2.x)
+```
+
+##Analyzing the Characteristics of Variables: Normality Test
+Multivariate Normality - requires variables to be independent
+https://cran.r-project.org/web/packages/MVN/vignettes/MVN.pdf
+```{r Normality Test}
+#install.packages("nortest")
+library("nortest")
+
+normality_test <- apply(Ordered_Individual_Data[,c(3:157)], 2, ad.test)
+
+#Need to determine which variables have significant p-values
+normality_p.values <- c()
+variable_names <- colnames(Ordered_Individual_Data[,c(3:157)])
+
+for(col in c(1:155)){
+  variable_normality <- normality_test[[col]]
+  p.value <- variable_normality$p.value
+  normality_p.values <- cbind(normality_p.values, p.value)
+}
+
+colnames(normality_p.values) <- variable_names
+
+#p-values less than 0.05 mean the variables are non-normal
+nonnormal_variables <- t(normality_p.values)
+nonnormal_variables[nonnormal_variables > 0.01] = NA
+nonnormal_variables <- as.data.frame(t(na.omit(nonnormal_variables)))
+
+normal_variables <- t(normality_p.values)
+normal_variables[normal_variables < 0.01] = NA
+normal_variables <- as.data.frame(t(na.omit(normal_variables)))
+```
+
+All of our variables are not normal; therefore we will continue our analysis with the median because it is more resistant to outliers and non-normal data. However, for arguement's sake we also calculate the mean here 
+
+```{r Mean , eval=FALSE}
+Weighted_Mean <- function(aCol){weighted.mean(aCol,w=Ordered_Individual_Data$V258.x)}
+
+Ordered_Country_Means <- aggregate(Ordered_Individual_Data[,c(3)],
+                                   by=list(Ordered_Individual_Data$V2.x),
+                                   Weighted_Mean)
+```
+
+
+#Factor Analysis at the Individual Level
+This is only possible because there are more respondants than variables. This analysis does not take country or weights into account at all. 
+
+Unfortunately, you lose over HALF the respondants due to missing data! 
+```{r FA at Indiv Level}
+Reduction <- na.omit(Ordered_Individual_Data)
+
+#Factor analysis assumes the data is continuous.
+#Have to eliminate respondants with any missing values
+Ordered_FA <- factanal(na.omit(Ordered_Individual_Data[,c(3:157)]),3)
+
+Ordered_FA_Loadings <-Ordered_FA$loadings[,c(1:3)]
+plot(Ordered_FA$loadings[,c(1:2)])
+```
+While there are arguments both ways, we need to agregate if we want to understand relationships at the national level.
+
+
+#MIRT at Individual Level
+Running on Seattle Computer
+```{r Individual MIRT, eval = FALSE}
+V258.x <- Individual_Data$V258.x
+#write.csv(V258.x, "Weight_Vector.csv")
+
+Individual_MIRTData<- cbind(Nominal_Individual_Data[,c(3:24)], 
+                            Dichotomous_Individual_Data[,c(3:38)], Ordered_Individual_Data[,c(3:157)])
+
+#write.csv(Individual_MIRTData, "Individual_MIRTData_040816.csv")
+```
+
+
+#Calculating Median for Ordered Questions
+Not all questions in the WVS have categorical responses. Some questions ask respondants to respond on an ordered or likert scale. Finding the country median of these questions allows us to understand how countries are distributed across the same ordered scale. In order to do this we need to aggregate the data into weighted sums for each country. The Weighted_Sums_Likerts function returns a dataframe with countries as the rows and the columns as the response categories ranging from 1 to 10 depending on the number of ordered categories. NOTE: we have already removed some questions do to the results of a sensitivity analysis. Therefore, we do not look at the I don't know, missing, or not answered columns and they are coded as NA.
+```{r Ordered Count Function}
+Weighted_Sums_Likert_subset <- function(aColumn){
+ 
+  miss=0
+  r1=0
+  r2=0
+  r3=0
+  r4=0
+  r5=0
+  r6=0
+  r7=0
+  r8=0
+  r9=0
+  r10=0
+  rneg1=0
+  
+  count = 1
+  
+for (value in aColumn){
+    
+    if(is.na(value)){
+      miss = miss + Ordered_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 1){
+      r1 = r1 + Ordered_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 2){
+      r2 = r2 + Ordered_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 3){
+      r3 = r3 + Ordered_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 4){
+      r4 = r4 + Ordered_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 5){
+      r5 = r5 + Ordered_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 6){
+      r6 = r6 + Ordered_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 7){
+      r7 = r7 + Ordered_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 8){
+      r8 = r8 + Ordered_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 9){
+      r9 = r9 + Ordered_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 10){
+      r10 = r10 + Ordered_Individual_Data$V258.x[count]
+      next
+    }
+    count = count + 1
+  }
+  #Note that NA responses not included in subset. 
+  dataofresponses_subset<-cbind(r1, r2, r3, r4, r5, r6, r7, r8, r9, r10) 
+  
+  #each column is a response sum, each row is coutry
+  return(dataofresponses_subset)
+}
+```
+
+To determine the median of the ordered questions, we will loop through every column of the orered question dataframe and sum up the number of people who choose a particular value. We will determine the median by finding where the cummulative summative is at or above 50%. 
+```{r Median Calculation, warning=FALSE}
+Ordinal_Question_Column_Names = names(Ordered_Individual_Data)[c(3:157)] #first two columns are country and weight
+Ordinal_Question_Column_Names_Count <- c()
+Ordered_Medians <- data.frame(Country_Codes)
+
+for(i in 1:155){ 
+  Question_Name <- paste(Ordinal_Question_Column_Names[i], "Count", sep = "_")
+  Ordinal_Question_Column_Names_Count <- c(Ordinal_Question_Column_Names_Count, Question_Name)
+  }
+count = 1
+
+# Loop through every question to create a dataframe with responses as columns and countries as rows - then determine the median and create a dataframe of countries as rows and questions as columns - each cell is a median for that question/country
+  for(col in Ordinal_Question_Column_Names){
+        dataofresponses_country_subset <- aggregate(Ordered_Individual_Data[,col], 
+                                   by=list(Ordered_Individual_Data$V2.x), 
+                                   Weighted_Sums_Likert_subset, simplify=FALSE)
+    #To transform the dataframe into countries as rows and columns as categories
+     Ordinal_Question_Counts <-c()
+   for(i in 1:56){
+      Count_Ordinal <-t(as.data.frame(dataofresponses_country_subset$x[i]))
+      Ordinal_Question_Counts <- cbind(Ordinal_Question_Counts, Count_Ordinal)
+   }
+  
+   Ordinal_Question_Counts <- t(Ordinal_Question_Counts)
+   row.names(Ordinal_Question_Counts) <- as.character(dataofresponses_country_subset$Group.1)
+   colnames(Ordinal_Question_Counts) <- c( "1", "2", "3", "4", "5", "6", "7", "8", "9", "10")
+
+   #Add up rows to determine total number of people from each country who answered each question
+   country_sums <- as.data.frame(apply(Ordinal_Question_Counts, 1, sum)) 
+   precentages <-data.frame() #this dataframe will store the precentage of people who answered each category
+     
+   for(i in 1:56){
+      if(country_sums$`apply(Ordinal_Question_Counts, 1, sum)`[i]==0){
+       precentages <- rbind(precentages, c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA))
+       }else
+         {percent <- round(Ordinal_Question_Counts[i,]/country_sums$`apply(Ordinal_Question_Counts, 1, sum)`[i]*100,3)
+         precentages <- rbind(precentages, percent)
+     }
+     }
+
+    colnames(precentages) <- c( "1", "2", "3", "4", "5", "6", "7", "8", "9", "10")
+    rownames(precentages) = rownames(Ordinal_Question_Counts)
+    Ordinal_Percentages<- precentages 
+    
+    #This dataframe shows the countries as rows and the weighted response percentages as the columns 
+    #In order to determine the median we are going to use the cummulative sum function
+    Cummulative_Sums <- apply(Ordinal_Percentages, 1, cumsum)
+    Cummulative_Sums <-as.data.frame(Cummulative_Sums)
+
+    #to determine the median we need the first value above 50%
+    Cummulative_Sums_subset <-t(na.omit(t(Cummulative_Sums)))
+   
+    Ordinal_Medians <-data.frame()
+    
+    Manual_Median <- function (aColumn) {
+      for(i in 1:10){  
+        if(aColumn[i] >= 50){
+            Country_Median <- i
+            Ordinal_Medians <- rbind(Ordinal_Medians, Country_Median)
+            break
+            }
+      }
+    return(Ordinal_Medians)
+    }
+    
+#in cummulative sums subset - categories are rows and the countries are columns - 
+#so to find the median, the columns should be added starting with the first row. 
+    Ordinal_Median_Country <- as.data.frame(t(as.data.frame(apply(Cummulative_Sums_subset, 2, Manual_Median))))
+    rownames(Ordinal_Median_Country) <- colnames(Cummulative_Sums_subset)
+    
+    #Ordered_Medians - dataframe tells you the category which is the median not the precentage - 
+    Ordered_Medians <- merge(Ordered_Medians, Ordinal_Median_Country, 
+                             by.x="Country_Codes",by.y = 0, all = TRUE, warnings=F)
+    
+    #Need to store the precent dataframe under question name
+    colnames(Ordinal_Percentages) <- paste(Ordinal_Question_Column_Names[count], 
+                                              colnames(Ordinal_Percentages), sep = "_")
+   assign(Ordinal_Question_Column_Names[count], Ordinal_Percentages)
+   
+   #To store the count dataframe under question name
+   assign(Ordinal_Question_Column_Names_Count[count],  Ordinal_Question_Counts)
+   count = count+1
+}#ending for loop to start a new question 
+```
+
+#Formatting Median Data Frame
+```{r Median Dataframe}
+#Now to add column names to the data frame of medians we just created. 
+colnames(Ordered_Medians)<-c("Country Codes", Ordinal_Question_Column_Names)
+
+#need to remove questions where all the answers are the same. 
+Variance_NA <- function(aCol){var(aCol, na.rm = FALSE)}
+Median_Variance <- as.data.frame(apply(Ordered_Medians[,c(2:156)], 2, Variance_NA))
+Median_Variability <- apply(Ordered_Medians[,c(2:156)], 2, unique)
+
+#The median is the same for every country for variable V4 and V102; therefore we will remove them because it does not tell us about differences between nations. 
+
+Ordered_Medians_Final <- Ordered_Medians[,c(1:4,6:29,31:156)]
+rownames(Ordered_Medians_Final)<-Ordered_Medians_Final$`Country Codes`
+Ordered_Medians_Final <- Ordered_Medians_Final[,c(2:154)]
+```
+
+#Imputing Missing Data
+```{r Missingingness in Data}
+#Double check that there are no NaN - not a number - cells in the data set.
+test_missingness <- as.data.frame(summary(apply(Ordered_Medians_Final, 2,is.nan)))
+
+#PCA function will not operate with NA so there are three choices
+   #Elminate the countries that have missing values, this takes us from 54 to 35 (we will not prusue this)
+   #Elminate the questions that have missing values, this takes us from 166 to 125 variables
+   #Estimate or impute the missing values based on the rest of the variable
+
+#Elminate questions with missing values
+test_data <- t(na.omit(t(Ordered_Medians_Final)))
+test_PCA <- prcomp(test_data, center=TRUE, scale. = TRUE)
+summary(test_PCA)
+
+#Esimate the missing values using multiple correspondance analysis. This assumes that the data is categorical.
+#install.packages("missMDA")
+library("missMDA")
+library("FactoMineR")
+Imputed_Data <- imputeMCA(Ordered_Medians_Final, ncp=5)
+Complete_Imputed_Data<- apply(Imputed_Data$completeObs,2,as.factor) #still has NA values in dataframe
+test_MCA <- MCA(Complete_Imputed_Data)
+summary(test_MCA)
+```
+
+Let's estimated the missing data using the mice function. This is a different function that estimates the data based on the means.
+```{r Impute Missing Data}
+library(mice)
+init = mice(Ordered_Medians_Final, maxit=0) 
+meth = init$method
+predM = init$predictorMatrix
+
+set.seed(103)
+imputed = mice(Ordered_Medians_Final, method=meth, predictorMatrix=predM, m=5, printFlag = FALSE)
+#Create a new data set with the imputed data
+Imputed_Ordered_Data<- complete(imputed)
+```
+
+#Calculations for Dichotomous Questions - Counting
+The precentage of people who answered each category for each questions can be computed by country. In this first function we are counting the number of weighted responses to each questions category. The function returns a dataframe with the number of responses for each category as a column and nations as rows. Note, the function must be used in combination with the aggregate function in order to have the rows to be nations.
+```{r Dichotomous Count Function}
+Count_Calc <- function(aColumn){
+  miss=0
+  r0=0
+  r1=0
+  r2=0
+  r3=0
+  r4=0
+  r5=0
+  r6=0
+  r7=0
+  r8=0
+  rneg1=0
+  rneg2=0
+  rneg6=0
+  
+  count =1
+  
+  for (value in aColumn){
+    if(is.na(value)){
+      miss = miss + 1
+      next
+    }
+    if(value == 0){
+      r0 = r0 + Dichotomous_Individual_Data$V258.x[count]
+      next
+    }
+    
+    if(value == 1){
+      r1 = r1 + Dichotomous_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 2){
+      r2 = r2 + Dichotomous_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 3){
+      r3 = r3 + Dichotomous_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 4){
+      r4 = r4 + Dichotomous_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 5){
+      r5 = r5 + Dichotomous_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 6){
+      r6 = r6 + Dichotomous_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 7){
+      r7= r7 + Dichotomous_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 8){
+      r8 = r8 + Dichotomous_Individual_Data$V258.x[count]
+      next
+    }
+    count = count + 1
+  }
+  sumbyresponse <-rbind(r0, r1, r2, r3, r4, r5, r6, r7, r8)
+return(sumbyresponse)
+}
+```
+
+#Dichotomous Precentage Calculation 
+To apply this function to the all the questions, we must use a "for" loop. The Count_Calc function is designed to count the responses to an individual question. The "for" loops allows the function to be applied to each column. As with the example the Count_Calc function will create dataframe for each function counting the number of respondants who selected which response and then the precentages (ranging for 0 to 100) with the nation are calculated. A table containing the reponse choice precentages by nation will be created and saved for each nation. The next step is to combine all of those dataframes into one dataframe with all the variables as columns and nations as rows. 
+
+```{r Dichotomous Precentage Calculation}
+#Create list of questions to loop function over 
+Cat_Question_Column_Names=names(Dichotomous_Individual_Data)[c(3:38)] #
+#Create an empty list to name the count dataframes
+Cat_Question_Column_Names_Count <- c()  
+
+#Create a new variables to hold the count calculations
+for(i in 1:length(Cat_Question_Column_Names)){ 
+  Question_Name <- paste(Cat_Question_Column_Names[i], "Count", sep = "_")
+  Cat_Question_Column_Names_Count <- c(Cat_Question_Column_Names_Count, Question_Name)
+  }
+
+PS_Percent_Cat_data <-data.frame() 
+count = 1
+
+#Apply the Count_Calc function to all the categorical questions.
+for(col in Cat_Question_Column_Names){ #starting with first question
+    #sumbyresponse_all dataframe contains the the categories as columns 
+    #and the weighted sums for the number of people who answered in that category. 
+    sumbyresponse_all <- aggregate(Dichotomous_Individual_Data[,col], 
+          by=list(Dichotomous_Individual_Data$V2.x), 
+          Count_Calc, simplify=FALSE)
+   
+   #Reformat the sumbyresponse_all dataframe into countries as rows & columns as categories
+   Question_Counts <-data.frame()
+   for(i in 1:56){
+      Count <- t(as.data.frame(sumbyresponse_all$x[i])) 
+      Question_Counts <- as.data.frame(rbind(Question_Counts, Count))
+   }
+   row.names(Question_Counts) <- as.character(sumbyresponse_all$Group.1)
+
+   #To store the count dataframe under question name
+   assign(Cat_Question_Column_Names_Count[count], Question_Counts)
+   
+  #Add up rows to determine total number of people from each country who answered each question
+   country_sums <- as.data.frame(apply(Question_Counts, 1, sum)) 
+   precentages <-data.frame() #this dataframe will store the precentage of people who answered each category
+    for(i in 1:56){
+      if(country_sums$`apply(Question_Counts, 1, sum)`[i]==0){
+       precentages <- rbind(precentages, c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA))
+       }else
+         {percent <- round(Question_Counts[i,]/country_sums$`apply(Question_Counts, 1, sum)`[i]*100,3)
+         precentages <- rbind(precentages, percent)
+     }
+     }
+   
+    colnames(precentages) <- c("0", "1", "2", "3", "4", "5", "6", "7", "8")
+    Dichotomous_Percentages<- precentages 
+  
+  #Need to store the precent dataframe under question name
+   colnames(Dichotomous_Percentages) <- paste(Cat_Question_Column_Names[count], 
+                                              colnames(Dichotomous_Percentages), sep = "_")
+   assign(Cat_Question_Column_Names[count], Dichotomous_Percentages)
+   count = count+1
+} #ending analysis of one question looping back to start another question
+```
+
+#Calculation of Precentages for Nominal Questions - Counting
+The precentage of people who answered each category for each questions can be computed by country. In this first function we are counting the number of weighted responses to each questions category. The function returns a dataframe with the number of responses for each category as a column and nations as rows. Note, the function must be used in combination with the aggregate function in order to have the rows to be nations.
+
+```{r Nominal Question Count Function}
+Count_Calc <- function(aColumn){
+  miss=0
+  r0=0
+  r1=0
+  r2=0
+  r3=0
+  r4=0
+  r5=0
+  r6=0
+  r7=0
+  r8=0
+  rneg1=0
+  rneg2=0
+  rneg6=0
+  
+  count =1
+  
+  for (value in aColumn){
+    if(is.na(value)){
+      miss = miss + 1
+      next
+    }
+    if(value == 0){
+      r0 = r0 + Nominal_Individual_Data$V258.x[count]
+      next
+    }
+    
+    if(value == 1){
+      r1 = r1 + Nominal_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 2){
+      r2 = r2 + Nominal_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 3){
+      r3 = r3 + Nominal_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 4){
+      r4 = r4 + Nominal_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 5){
+      r5 = r5 + Nominal_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 6){
+      r6 = r6 + Nominal_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 7){
+      r7= r7 + Nominal_Individual_Data$V258.x[count]
+      next
+    }
+    if(value == 8){
+      r8 = r8 + Nominal_Individual_Data$V258.x[count]
+      next
+    }
+    count = count + 1
+  }
+  sumbyresponse <-rbind(r0, r1, r2, r3, r4, r5, r6, r7, r8)
+return(sumbyresponse)
+}
+```
+
+#Categorical Precentage Calculation 
+To apply this function to the all the questions, we must use a "for" loop. The Count_Calc function is designed to count the responses to an individual question. The "for" loops allows the function to be applied to each column. As with the example the Count_Calc function will create dataframe for each function counting the number of respondants who selected which response and then the precentages (ranging for 0 to 100) with the nation are calculated. A table containing the reponse choice precentages by nation will be created and saved for each nation. The next step is to combine all of those dataframes into one dataframe with all the variables as columns and nations as rows. 
+```{r Nominal Precentage Calculation}
+#Create list of questions to loop function over 
+Cat_Question_Column_Names=names(Nominal_Individual_Data)[c(3:24)] #
+#Create an empty list to name the count dataframes
+Cat_Question_Column_Names_Count <- c()  
+
+#Create a new variables to hold the count calculations
+for(i in 1:length(Cat_Question_Column_Names)){ 
+  Question_Name <- paste(Cat_Question_Column_Names[i], "Count", sep = "_")
+  Cat_Question_Column_Names_Count <- c(Cat_Question_Column_Names_Count, Question_Name)
+  }
+
+PS_Percent_Cat_data <-data.frame() 
+count = 1
+
+#Apply the Count_Calc function to all the categorical questions.
+for(col in Cat_Question_Column_Names){ #starting with first question
+    #sumbyresponse_all dataframe contains the the categories as columns 
+    #and the weighted sums for the number of people who answered in that category. 
+    sumbyresponse_all <- aggregate(Nominal_Individual_Data[,col], 
+          by=list(Nominal_Individual_Data$V2.x), 
+          Count_Calc, simplify=FALSE)
+   
+   #Reformat the sumbyresponse_all dataframe into countries as rows & columns as categories
+   Question_Counts <-data.frame()
+   for(i in 1:56){
+      Count <- t(as.data.frame(sumbyresponse_all$x[i])) 
+      Question_Counts <- as.data.frame(rbind(Question_Counts, Count))
+   }
+   row.names(Question_Counts) <- as.character(sumbyresponse_all$Group.1)
+
+   #To store the count dataframe under question name
+   assign(Cat_Question_Column_Names_Count[count], Question_Counts)
+   
+   #Add up rows to determine total number of people from each country who answered each question
+   country_sums <- as.data.frame(apply(Question_Counts, 1, sum)) 
+   precentages <-data.frame() #this dataframe will store the precentage of people who answered each category
+    for(i in 1:56){
+      if(country_sums$`apply(Question_Counts, 1, sum)`[i]==0){
+       precentages <- rbind(precentages, c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA))
+       }else
+         {percent <- round(Question_Counts[i,]/country_sums$`apply(Question_Counts, 1, sum)`[i]*100,3)
+         precentages <- rbind(precentages, percent)
+     }
+     }
+   
+    colnames(precentages) <- c("0", "1", "2", "3", "4", "5", "6", "7", "8")
+    Nominal_Percentages<- precentages 
+  
+  #Need to store the precent dataframe under question name
+   colnames(Nominal_Percentages) <- paste(Cat_Question_Column_Names[count], 
+                                              colnames(Nominal_Percentages), sep = "_")
+   assign(Cat_Question_Column_Names[count], Nominal_Percentages)
+   count = count+1
+} #ending analysis of one question looping back to start another question
+```
+
+```{r Final Dichotomous and Nominal Data Precentages}
+Precentage_DFs <- cbind(V12,V13,V14,V15,V16,V17,V18,
+                        V19,V20,V21,V22,V24,
+                        V36,V37,V38,V39,V40,
+                        V41,V42,V43,V44,V66,
+                        V82,V83,V148,V149,
+                        V176,V177,V178,V179,
+                        V180,V187,V243,V244,V245,V246,
+                        V25, V26, V27, V28, V29, V30,
+                        V31, V32, V33, V34, V35,
+                        V60,V61,V62,V63,V64,V65,
+                        V80,V81,V147,V150,V151)
+
+#Remove the columns that are just zeros. This step removes categories that were not used by questions. 
+Final_Precentage_DFs<- Precentage_DFs[,-(which(colSums(Precentage_DFs, na.rm = TRUE) == 0))] 
+```
+
+Now we need to remove the "no" of the ditchomous variables because the variables are mirror images of each other
+```{r Dichotomous Variable Removal}
+Binary_Variables_ToRemove <- c("V12_2","V13_2", "V14_2", "V15_2", 
+                                                       "V16_2", "V17_2", "V18_2", 
+                                                       "V19_2",  "V20_2", "V21_2", 
+                                                       "V22_2", "V36_2", "V37_2", 
+                                                       "V38_2",  "V39_2", "V40_2", 
+                                                       "V41_2",  "V42_2", "V43_2", 
+                                                       "V44_2", "V24_2", "V66_2",
+                                                       "V82_2","V83_2","V148_2","V149_2",
+                                                       "V176_5", "V177_5",
+                                                       "V178_5","V179_5","V180_5","V187_2","V243_2",
+                                                       "V244_2","V245_2", "V246_2") 
+
+
+Final_Precentage_DFs <- Final_Precentage_DFs[,!colnames(Final_Precentage_DFs) %in% Binary_Variables_ToRemove] 
+
+#For the Nominal Variables we have to remove a reference category in order to avoid colinearity since the precentages will add to one. 
+
+Nominal_Variables_ToRemove <- c("V60_2","V61_2","V62_2","V63_2","V64_2","V65_2",
+                        "V80_2","V81_2","V147_2","V150_2","V151_2")
+
+Final_Precentage_DFs <- Final_Precentage_DFs[,!colnames(Final_Precentage_DFs) %in% Nominal_Variables_ToRemove] 
+```
+
+
+This dataset has missing values need to estimate missing values
+```{r Impute Precentage Data}
+#Estimate the missing values using MICE
+#install.packages("mice")
+library(mice)
+init = mice(Final_Precentage_DFs, maxit=0) 
+meth = init$method
+predM = init$predictorMatrix
+
+set.seed(103)
+imputed = mice(Final_Precentage_DFs , method=meth, predictorMatrix=predM, m=5, printFlag = FALSE)
+#Create a new data set with the imputed data
+Imputed_Precentage_Data<- complete(imputed)
+#Check that the imputed data doesn't have any missing values.
+#sapply(Imputed_Precentage_Data, function(x) sum(is.na(x)))
+```
+
+```{r Imputed Precentage Data}
+Final_Data <- merge(Imputed_Ordered_Data, Imputed_Precentage_Data, by.x = 0, by.y = 0)
+Country_rownames<- Final_Data$Row.names
+
+Final_Data <- apply(Final_Data,2,as.numeric)
+Final_Data <- Final_Data[,c(2:233)]
+rownames(Final_Data) <- Country_rownames
+Final_Median_Precentage_Data <- Final_Data
+#write.csv(Final_Median_Precentage_Data, "Final_Median_Percentage_Data.csv")
+
+Final_Data_Missing <- summary(apply(Final_Data, 2, is.na))
+```
+
+We have two options.
+  1. Since this data has medians and precentage data, we can run a PCA analysis with prcomp or EFA with fa. This assumes that the data is numerical. PCA uses singular value decomposition to determine the relationships between the data. Must center and scale the data because the median data and the precentage data are on two different scales. EFA uses pearson correlations to determine the latent factors and assumes that all relationships between the variables are due to latent variables (which we know is not true since the nominal and dichotomous variables are dummy variables)
+  2. We could determine the mode of the dichotomous and polytomous data points and run an ordered and nominal item factor analysis using an unconidtional maximum likelihood via the MCEM or MHRM (faster)
+  
+  Let's start with the PCA.
+
+```{r PCA1}
+PCA_Precentage_Median_SVD<- prcomp(Final_Data, center = TRUE, scale. = TRUE)
+summary(PCA_Precentage_Median_SVD)
+```
+
+```{r PCA1 Scree Plot}
+plot(PCA_Precentage_Median_SVD, main = "ScreePlot - Medians&Precentage", type = "l")
+```
+This screeplot is not ideal because it has two elbows (retain 3 or 6 factors) and even though it is standardized all the eigenvalues on the y-axis are greater than 1. Retaining 3 factors maintains 39% of the orginial variability' whereas retaining 6 factors keeps 53% of the original variance. There are several other maps we can look at to see if there are patterns. 
+
+```{r PCA1 Factor Map}
+#install.packages("FactoMineR")
+library(FactoMineR)
+PCA(Final_Data)
+```
+These two plots show us the spread of the countries across the first and second dimensions. Ideally the observations, in this case countries, are grouped along the axes in the first plot and the variables or questions should be clusters
+
+#PCA Result Analysis
+```{r PCA1 Scores}
+#Rename PCA so that I can use the copied code
+PCA_Analysis<- prcomp(Final_Data, center=TRUE, scale.=TRUE)
+
+#Scores have countries as rows
+PCA_Scores <- PCA_Analysis$x[,c(1:5)]
+rownames(PCA_Scores) <- Country_rownames
+head(PCA_Scores)
+
+# We need the names in order to merge it with a world map. In order for the merge to work, we had to change the names to match the world map shape file. 
+Country_Names <-read.csv("Country_Code_Names.csv")
+Country_Names <-Country_Names[,c("Country.Code", "Country.Title")]
+Named_PCA_Analysis_Data <- merge(Country_Names, PCA_Scores, by.y= 0, by.x ="Country.Code", all.y=T)
+```
+
+```{r PCA1 Rotations}
+#install.packages("GPArotation")
+library(GPArotation)
+
+plot(PCA_Analysis$rotation [,c(1:2)], xlim = c(-1, 1), ylim = c(-1, 1), main = "Unrotated Loadings")
+abline(v = 0, h = 0, lty = 2)
+
+Varimax<- varimax(PCA_Analysis$rotation [,c(1:5)])
+Varimax_Loadings_PC1 <- as.data.frame(Varimax$loadings[,1])
+
+plot(varimax(PCA_Analysis$rotation [,c(1:2)])$loadings, xlim = c(-1, 1), ylim = c(-1, 1), main = "Varimax Rotated Loadings")
+abline(v = 0, h = 0, lty = 2)
+
+plot(oblimin(PCA_Analysis$rotation [,c(1:2)])$loadings, xlim = c(-1, 1), ylim = c(-1, 1), main = "Oblimin Rotated Loadings")
+abline(v = 0, h = 0, lty = 2)
+
+#the points in the graph represent how each variable weighs on the first two dimensions. The two clusters indicated that there are two groups of variables that load in similar ways on to these components.
+```
+
+```{r PCA1 Loadings}
+#Loadings have variables as rows
+PCA_Loadings <- round(PCA_Analysis$rotation [,c(1:5)], 3)
+head(PCA_Loadings)
+PCA_Loadings <- as.data.frame(PCA_Loadings)
+
+#Plots of Components
+#pdf("Loading distribution.pdf", paper = "USr")
+par(mfrow=c(2,3))
+
+plot(PCA_Loadings$PC1, type = "l", main = "PC1")
+abline(h=0.05, col="red")
+abline(h=-0.05, col="red")
+abline(h=0.075, col="grey")
+abline(h=-0.075, col="grey")
+abline(h=0.1, col="blue")
+abline(h=-0.1, col="blue")
+
+plot(PCA_Loadings$PC2, type = "l", main = "PC2")
+abline(h=0.05, col="red")
+abline(h=-0.05, col="red")
+abline(h=0.075, col="grey")
+abline(h=-0.075, col="grey")
+abline(h=0.1, col="blue")
+abline(h=-0.1, col="blue")
+
+plot(PCA_Loadings$PC3, type = "l", main = "PC3")
+abline(h=0.05, col="red")
+abline(h=-0.05, col="red")
+abline(h=0.075, col="grey")
+abline(h=-0.075, col="grey")
+abline(h=0.1, col="blue")
+abline(h=-0.1, col="blue")
+
+plot(PCA_Loadings$PC4, type = "l", main = "PC4")
+abline(h=0.05, col="red")
+abline(h=-0.05, col="red")
+abline(h=0.075, col="grey")
+abline(h=-0.075, col="grey")
+abline(h=0.1, col="blue")
+abline(h=-0.1, col="blue")
+
+plot(PCA_Loadings$PC5, type = "l", main = "PC5")
+abline(h=0.05, col="red")
+abline(h=-0.05, col="red")
+abline(h=0.075, col="grey")
+abline(h=-0.075, col="grey")
+abline(h=0.1, col="blue")
+abline(h=-0.1, col="blue")
+
+#dev.off()
+```
+
+```{r PCA Coefficients}
+#These are multiples of the loadings. These are the values that go into the linear regression model.
+PCA_Coefficients <-t(t(PCA_Analysis$rotation)*PCA_Analysis$sdev)
+plot(PCA_Coefficients[,1], PCA_Coefficients[,2])
+
+#"Because the sum of the squares of all loadings for an individual principal component must sum to one, we can calculate what the loadings would be if all variables contributed equally to that principal component. Any variable that has a larger loading than this value contributes more than one variable's worth of information and would be regarded as an important contributor to that principal component."
+#http://strata.uga.edu/8370/lecturenotes/principalComponents.html
+
+sqrt(1/ncol(Final_Median_Precentage_Data))
+```
+
+
+#Option 2: Median and Mode Analysis
+Instead of using the precentages for the count dataframe we could use the mode to represent the nominal questions. With the count dataframes we can determine the mode of each question for each country. However, we built function to calculate mode in combination with the aggregate function to achieve the same thing. 
+```{r Mode Calculations}
+# The table function counts the number of responses of each types
+# the sort function sorts the table from low to high
+# the tail functions gives you the last column or the highest count response
+
+Mode <- function(aColumn){
+  mode=names(tail(sort(table(aColumn)),1))
+  return(mode)
+}
+
+Mode_Example <- aggregate(Nominal_Individual_Data[,10], 
+          by=list(Nominal_Individual_Data$V2.x), 
+          Mode)
+#interestingly - it's the same response category for all countries. 
+Mode_Aggregate = function(aCol){aggregate(aCol, by=list(Nominal_Individual_Data$V2.x), Mode)}
+
+Modes <- apply(Nominal_Individual_Data[,c(3:24)],2,Mode_Aggregate)
+Modes_Nominal<- as.data.frame(Modes) #this dataframe containes the modes for each questions of the nominal data
+Modes_Nominal_Clean<- Modes_Nominal[,c(2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44)]
+rownames(Modes_Nominal_Clean) <- Modes_Nominal$V60.Group.1
+
+#we only want to retain those that have varying values for countries, so let's check that their is variety with the unique function
+Nominal_Modes_Unique <- apply(Modes_Nominal_Clean, 2, unique)
+#we can tell that we need to remove V26-V35, and V60 - since all the countries have a mode of 1.
+Nominal_Modes_Final <- Modes_Nominal_Clean[,-c(2:12)]
+
+summary(Nominal_Individual_Data$V81)
+V81.x <- as.data.frame(Mode_Aggregate(Nominal_Individual_Data$V81))
+V81.x$x[[49]]<- NA
+V81_Numeric <- apply(V81.x, 2, as.numeric)
+Nominal_Modes_Final$V81.x[[49]]<-NA
+
+#we can repeat with the dichotomous data
+Modes_Dich<- apply(Dichotomous_Individual_Data[,c(3:38)],2,Mode_Aggregate)
+Modes_Dich<- as.data.frame(Modes_Dich)
+Modes_Dich_Clean <- Modes_Dich[,c(4,6,8,10,12,14,16,18,20,22,
+                            24,26,28,30,32,34,36,38,40,
+                            42,44,46,48,50,52,54,56,58,
+                            60,62,64,66,68,70,72)]
+
+rownames(Modes_Dich_Clean) <- Modes_Dich$V12.Group.1
+
+Dich_Modes_Unique <- apply(Modes_Dich_Clean, 2, unique)
+
+#there are five questions that should be removed because all the countries answered the same
+#V44, V82, V83, V179, V180
+Dich_Modes_Final <- Modes_Dich_Clean[,-c(20,22,23,29,30)]
+
+Dich_Modes_Final$V36.x[[22]]<-NA
+Dich_Modes_Final$V38.x[[22]]<-NA
+Dich_Modes_Final$V40.x[[22]]<-NA
+Dich_Modes_Final$V42.x[[22]]<-NA
+Dich_Modes_Final$V148.x[[16]]<-NA
+Dich_Modes_Final$V149.x[[16]]<-NA
+Dich_Modes_Final$V148.x[[50]]<-NA
+Dich_Modes_Final$V149.x[[50]]<-NA
+Dich_Modes_Final$V148.x[[56]]<-NA
+Dich_Modes_Final$V149.x[[56]]<-NA
+
+Dich_Modes_Final$V178.x[[22]]<-NA
+Dich_Modes_Final$V243.x[[9]]<-NA
+Dich_Modes_Final$V243.x[[16]]<-NA
+Dich_Modes_Final$V243.x[[22]]<-NA
+Dich_Modes_Final$V243.x[[46]]<-NA
+Dich_Modes_Final$V244.x[[9]]<-NA
+Dich_Modes_Final$V244.x[[16]]<-NA
+Dich_Modes_Final$V244.x[[22]]<-NA
+Dich_Modes_Final$V244.x[[46]]<-NA
+Dich_Modes_Final$V245.x[[4]]<-NA
+Dich_Modes_Final$V245.x[[9]]<-NA
+Dich_Modes_Final$V245.x[[16]]<-NA
+Dich_Modes_Final$V245.x[[19]]<-NA
+Dich_Modes_Final$V245.x[[22]]<-NA
+Dich_Modes_Final$V245.x[[46]]<-NA
+Dich_Modes_Final$V246.x[[16]]<-NA
+Dich_Modes_Final$V246.x[[19]]<-NA
+Dich_Modes_Final$V246.x[[22]]<-NA
+Dich_Modes_Final$V246.x[[42]]<-NA
+Dich_Modes_Final$V246.x[[46]]<-NA
+
+#Therefore our final dataset of modes is 
+Mode_Data <- merge(Nominal_Modes_Final, Dich_Modes_Final, by.x=0, by.y=0)
+rownames(Mode_Data)<- Mode_Data$Row.names
+Mode_Data_Final <- as.data.frame(Mode_Data[,c(2:42)])
+
+
+Mode_Data_Final <- apply(Mode_Data_Final,2,as.numeric)
+Mode_Data_Final <- apply(Mode_Data_Final,2,as.character)
+Mode_Data_Final <- as.data.frame(apply(Mode_Data_Final,2,as.factor))
+
+#there are missing values in this data frame. We can estimate those values using the same function as before which makes an estimate based on the mean of the data. 
+#install.packages("mice")
+library(mice)
+init = mice(Mode_Data_Final, maxit=0) 
+meth = init$method
+predM = init$predictorMatrix
+
+set.seed(103)
+imputed = mice(Mode_Data_Final, method=meth, predictorMatrix=predM, m=5, printFlag = FALSE)
+
+#Create a new data set with the imputed data
+Imputed_Mode_Data<- complete(imputed)
+rownames(Imputed_Mode_Data)<- Mode_Data$Row.names
+
+#Check to make sure multiple categories were used.
+Mode_Unique <- apply(Imputed_Mode_Data, 2, unique)
+```
+
+Now that we have the median for the ordered data and the mode for the unordered data, we can run a MIRT using this information. We need speficiy the ordered variables to use the graded model and the unordered data to use the nominal model. First, let's merge them into one dataframe and then run an item response analysis with graded for the ordered data and nominal for the unordered data.
+```{r Imputed Mode and Median Data}
+Imputed_Mode_Median_Data <- merge(Imputed_Ordered_Data, Imputed_Mode_Data, by.x=0, by.y=0)
+Countries <-Imputed_Mode_Median_Data$Row.names
+rownames(Imputed_Mode_Median_Data)<- Countries
+Imputed_Mode_Median_Data <- Imputed_Mode_Median_Data[,c(2:195)]
+
+#The following items have only one response category and cannot be estimated: V36.x V178.x V243.x V244.x V245.x V246.x
+Imputed_Mode_Median_Data <- Imputed_Mode_Median_Data[,-c(176,189,191:194)]
+Imputed_Mode_Median_Data <- apply(Imputed_Mode_Median_Data,2,as.numeric)
+#write.csv(Imputed_Mode_Median_Data, "Imputed_Mode_Median_Data2.csv")
+
+#Imputed_Mode_Median_Data1 <- read.csv("Imputed_Mode_Median_Data.csv")
+#Imputed_Mode_Median_Data1 <- Imputed_Mode_Median_Data1[,c(2:189)]
+#Imputed_Comparison <- as.data.frame(Imputed_Mode_Median_Data1 == Imputed_Mode_Median_Data)
+#summary(Imputed_Comparison)
+```
+
+```{r Normality Test of Mode and Medians}
+#install.packages("nortest")
+library("nortest")
+
+normality_test <- apply(Imputed_Mode_Median_Data, 2, ad.test)
+
+#Need to determine which variables have significant p-values
+normality_p.values <- c()
+variable_names <- colnames(Imputed_Mode_Median_Data)
+
+for(col in c(1:188)){
+  variable_normality <- normality_test[[col]]
+  p.value <- variable_normality$p.value
+  normality_p.values <- cbind(normality_p.values, p.value)
+}
+
+colnames(normality_p.values) <- variable_names
+
+#p-values less than 0.05 mean the variables are non-normal
+nonnormal_variables <- t(normality_p.values)
+nonnormal_variables[nonnormal_variables > 0.01] = NA
+nonnormal_variables <- as.data.frame(t(na.omit(nonnormal_variables)))
+
+normal_variables <- t(normality_p.values)
+normal_variables[normal_variables < 0.01] = NA
+normal_variables <- as.data.frame(t(na.omit(normal_variables)))
+```
+
+Let's look at the distribution of the modes and medians
+Ploting done in excel
+```{r Mode and Median Frequency}
+freq=table(col(Imputed_Mode_Median_Data), as.matrix(Imputed_Mode_Median_Data))
+Names=colnames(Imputed_Mode_Median_Data)  # create list of names
+data=data.frame(cbind(freq),Names)   # combine them into a data frame
+data=data[,c(12,1,2,3,4,5,6,7,8,9,10,11)] # sort columns
+
+#write.csv(data, "frequency_mode_median.csv")
+```
+
+#MIRT Analysis
+```{r MIRT 5F}
+Threeitemtype <- read.csv("Itemtype.csv")
+itemT<-as.character(Threeitemtype$Model.Required)
+
+library(stats4)
+library(lattice)
+library(mirt)
+
+#this samples from the 54 countries multiple times in order to reduce the demand on the E and M steps. 
+MIRT_Mode_Median_FiveFactor_MCEM<- mirt(Imputed_Mode_Median_Data, 5, itemtype=itemT, method = "MCEM")
+MIRT_Mode_Median_FiveFactor_MCEM_Summary <- summary(MIRT_Mode_Median_FiveFactor_MCEM, rotate = "none")
+#SS loadings:  39.504 23.42 18.769 13.955 24.465 
+#Proportion Var:  0.21 0.125 0.1 0.074 0.13 
+
+MIRT_Mode_Median_FiveFactor_MHRM<- mirt(Imputed_Mode_Median_Data, 5, itemtype=itemT, method = "QMCEM")
+MIRT_Mode_Median_FiveFactor_MHRM_Summary <- summary(MIRT_Mode_Median_FiveFactor_MCEM, rotate = "none")
+#SS loadings:  39.504 23.42 18.769 13.955 24.465 
+#Proportion Var:  0.21 0.125 0.1 0.074 0.13 
+#63.9% of Variance
+
+MIRT_Scores_Unrotated_FiveFactors<- fscores(MIRT_Mode_Median_FiveFactor_MCEM, rotate="none")
+MIRT_Loadings_Unrotated_FiveFactors<- MIRT_Mode_Median_FiveFactor_MCEM
+rownames(MIRT_Scores_Unrotated_FiveFactors) <- Countries
+
+#record the parameters for the variables(items)
+Coefficients_Ordering5F<-coef(MIRT_Mode_Median_FiveFactor_MCEM,  simplify = TRUE)
+Coefficients_Ordering5F_DF<- as.data.frame(Coefficients_Ordering5F$items)
+
+#From GPCM and NRM modelled items
+#SS loadings:  33.974 32.939 26.546 23.082 23.878 
+#Proportion Var:  0.172 0.166 0.134 0.117 0.121 
+#71% of variance explained
+
+#MIRT_Scores_Varimax_5F<- fscores(MIRT_Mode_Median_5F,rotate = "varimax")
+#MIRT_Loading_Varimax_5F <- summary(MIRT_Mode_Median_5F, rotate="varimax")
+#Rotated SS loadings:  34.67 28.28 25.156 26.271 26.042 
+
+#MIRT_Scores_Oblimin_5F<- fscores(MIRT_Mode_Median_5F,rotate = "oblimin")
+#MIRT_Loading_Oblimin <- summary(MIRT_Mode_Median, rotate="oblimin")
+#Rotated SS loadings:  33.336 28.113 24.989 26.303 24.94 
+
+#Factor correlations: 
+#       F1     F2     F3     F4     F5
+#F1  1.000  0.124 -0.018 -0.158  0.044
+#F2  0.124  1.000 -0.017  0.022 -0.032
+#F3 -0.018 -0.017  1.000 -0.033  0.034
+#F4 -0.158  0.022 -0.033  1.000 -0.109
+#F5  0.044 -0.032  0.034 -0.109  1.000
+```
+
+```{r Mirt 4F Model}
+library(stats4)
+library(lattice)
+library(mirt)
+
+Threeitemtype <- read.csv("Itemtype.csv")
+itemT<-as.character(Threeitemtype$Model.Required)
+
+#this samples from the 54 countries multiple times in order to reduce the demand on the E and M steps. 
+MIRT_Mode_Median_FourFactor_MCEM<- mirt(Imputed_Mode_Median_Data, 4, itemtype=itemT, method = "MCEM")
+MIRT_Mode_Median_FourFactor_MCEM_Summary <- summary(MIRT_Mode_Median_FourFactor_MCEM, rotate = "none")
+#SS loadings:  28.621 29.814 37.3 20.407 
+#Proportion Var:  0.152 0.159 0.198 0.109 
+#61.8% explained by 4 factors
+
+MIRT_Mode_Median_FourFactor_MHRM<- mirt(Imputed_Mode_Median_Data, 4, itemtype=itemT, method = "MHRM")
+MIRT_Mode_Median_FourFactor_MHRM_Summary <- summary(MIRT_Mode_Median_FourFactor_MHRM, rotate = "none")
+#SS loadings:  28.621 29.814 37.3 20.407 
+#Proportion Var:  0.152 0.159 0.198 0.109 
+
+#record the parameters for the variables(items)
+Coefficients_Ordering4F<- coef(MIRT_Mode_Median_FourFactor_MCEM, simplify = TRUE)
+Coefficients_Ordering4F_DF <- as.data.frame(Coefficients_Ordering4F$items)
+#write.csv(Coefficients_Ordering4F_DF, "Coefficient_4F.csv")
+
+#Interpretation of Loadings requires understanding how they are ordered
+#itemfit(MIRT_Mode_Median_FourFactor_MCEM, "S_X2", 155, QMC=TRUE)
+#Item158 <- extract.item(MIRT_Mode_Median_FourFactor_MCEM,158) 
+#going to look at the 158th - binary variable - should have two columns, looking to see if it reformatted variables 
+#Theta <- t(matrix(seq(-4,4, by = 0.2), 4))
+#traceline155 <- probtrace(Item158, Theta)
+#head(data.frame(traceline100, Theta=Theta))
+```
+
+We then ran a 3 factor IRF model, because utlimately it is easier to understand if there are less factors. 
+```{r MIRT 3F}
+library(stats4)
+library(lattice)
+library(mirt)
+
+#this samples from the 54 countries multiple times in order to reduce the demand on the E and M steps. 
+MIRT_Mode_Median_ThreeFactor_MCEM<- mirt(Imputed_Mode_Median_Data, 3, itemtype=itemT, method = "QMCEM")
+MIRT_Mode_Median_ThreeFactor_MCEMSummary <- summary(MIRT_Mode_Median_ThreeFactor_MCEM, rotate = "none")
+#Error: Model did not converge (unacceptable gradient caused by extreme parameter values)
+#Changed to QMCEM
+
+#compare MCEM and MHRM
+MIRT_Mode_Median_ThreeFactor_MHRM<- mirt(Imputed_Mode_Median_Data, 3, itemtype=itemT, method = "MHRM")
+MIRT_Mode_Median_ThreeFactor_MHRMSummary <- summary(MIRT_Mode_Median_ThreeFactor_MHRM, rotate = "none")
+
+MIRT_Scores_Unrotated_ThreeFactors<- fscores(MIRT_Mode_Median_ThreeFactor_MCEM, rotate="none")
+MIRT_Loadings_Unrotated_ThreeFactors<- MIRT_Mode_Median_ThreeFactor_MCEM
+rownames(MIRT_Scores_Unrotated_ThreeFactors) <- Countries
+
+#record the parameters for the variables(items)
+Coefficients_Ordering3F<- coef(MIRT_Mode_Median_ThreeFactor_MCEM, simplify = TRUE)
+Coefficients_Ordering3F_DF<- as.data.frame(Coefficients_Ordering3F$items)
+#write.csv(Coefficients_Ordering3F_DF, "Coefficients_Ordering3F_DF.csv")
+
+#since we have a small sample size, check the fit of the model and the standard errors of the parameters within the model.
+#itemplot(MIRT_Mode_Median_ThreeFactor_MCEM,100, type="info", degrees = 90, cex=0.5)
+
+#iteminfo100 <- iteminfo(Item100,Theta, total.info = FALSE, multidim_matrix = TRUE)
+#extract.mirt(MIRT_Mode_Median_ThreeFactor_MCEM, "freq")
+
+#Bootstrap_SE <- boot.mirt(MIRT_Mode_Median_ThreeFactor)
+#GoodnessofFit <- M2(MIRT_Mode_Median_ThreeFactor, QMC=TRUE)
+#Not enough space of computer to run. Error: cannot allocate vector of size 2.4GB
+
+#modSE <- mirt(Imputed_Mode_Median_Data,3,itemtype=itemT,pars=mod2values(MIRT_Mode_Median_ThreeFactor),SE=TRUE,TOL=0.01)
+#Error M-step optimizer converged immediately. Solution is either at the ML or starting values are causing issues and should be adjusted
+
+#boot.mirt(MIRT_Mode_Median_ThreeFactor, R=1000)
+#Warning: Note: bootstrapped standard errors for slope parameters in exploratory models are not meaningful.
+
+#MIRT_Mode_Median_ThreeFactor<- mirt(Imputed_Mode_Median_Data, 3, itemtype=itemT, method = "EM", verbose=FALSE, 
+                                    #SE=TRUE, technical = list(SEtol = 1e-4))
+#MIRT_Mode_Median_ThreeFactor_Summary <- summary(MIRT_Mode_Median_ThreeFactor, rotate = "none")
+#SS loadings:  25.806 20.222 19.86 
+#Proportion Var:  0.137 0.108 0.106 
+
+#results from two item type:
+#SS loadings:  40.632 25.09 27.243 
+#Proportion Var:  0.216 0.133 0.145
+#49.4% of Variance explained by 3 factors
+```
+
+Then we ran a 2 factor model.
+```{r Two Factor Model}
+#SS loadings:  42.405 21.256 
+#Proportion Var:  0.226 0.113 
+
+library(stats4)
+library(lattice)
+library(mirt)
+
+#this samples from the 54 countries multiple times in order to reduce the demand on the E and M steps. 
+MIRT_Mode_Median_TwoFactor_MCEM<- mirt(Imputed_Mode_Median_Data, 2, itemtype=itemT, method = "MCEM")
+MIRT_Mode_Median_TwoFactor_MCEM_Summary <- summary(MIRT_Mode_Median_TwoFactor_MCEM, rotate = "none")
+
+
+MIRT_Mode_Median_TwoFactor_MHRM<- mirt(Imputed_Mode_Median_Data, 2, itemtype=itemT, method = "MHRM")
+MIRT_Mode_Median_TwoFactor_MHRM_Summary <- summary(MIRT_Mode_Median_TwoFactor_MCEM, rotate = "none")
+
+#MIRT_Mode_Median_OneFactor<- mirt(Imputed_Mode_Median_Data, 1, itemtype=itemT, method = "EM", verbose=FALSE, 
+                                  #  SE=TRUE, technical = list(SEtol = 1e-4))
+#Coefficient_StEr_OneFactor <- coef(MIRT_Mode_Median_ThreeFactor, printSE = TRUE)
+
+MIRT_Scores_Unrotated_TwoFactors<- fscores(MIRT_Mode_Median_TwoFactor_MCEM, rotate="none")
+MIRT_Loadings_Unrotated_TwoFactors<- MIRT_Mode_Median_TwoFactor_MCEM
+rownames(MIRT_Scores_Unrotated_TwoFactors) <- Countries
+
+#record the parameters for the variables(items)
+Coefficients_Ordering2F<- coef(MIRT_Mode_Median_TwoFactor_MCEM, simplify = TRUE)
+Coefficients_Ordering2F_DF<- as.data.frame(Coefficients_Ordering2F$items)
+```
+
+Then we ran a 1 factor model.
+```{r One Factor Model}
+library(stats4)
+library(lattice)
+library(mirt)
+
+#this samples from the 54 countries multiple times in order to reduce the demand on the E and M steps. 
+MIRT_Mode_Median_OneFactor_MCEM<- mirt(Imputed_Mode_Median_Data, 1, itemtype=itemT, method = "MCEM")
+MIRT_Mode_Median_OneFactor_MCEM_Summary <- summary(MIRT_Mode_Median_OneFactor_MCEM, rotate = "none")
+#SS loadings:  40.926 
+#Proportion Var:  0.218
+
+MIRT_Mode_Median_OneFactor_MHRM<- mirt(Imputed_Mode_Median_Data, 1, itemtype=itemT, method = "MHRM")
+MIRT_Mode_Median_OneFactor_MHRM_Summary <- summary(MIRT_Mode_Median_OneFactor_MCEM, rotate = "none")
+
+#MIRT_Mode_Median_OneFactor<- mirt(Imputed_Mode_Median_Data, 1, itemtype=itemT, method = "EM", verbose=FALSE, 
+                                  #  SE=TRUE, technical = list(SEtol = 1e-4))
+#Coefficient_StEr_OneFactor <- coef(MIRT_Mode_Median_ThreeFactor, printSE = TRUE)
+
+MIRT_Scores_Unrotated_OneFactors<- fscores(MIRT_Mode_Median_OneFactor_MCEM, rotate="none")
+MIRT_Loadings_Unrotated_OneFactors<- MIRT_Mode_Median_OneFactor_MCEM
+rownames(MIRT_Scores_Unrotated_OneFactors) <- Countries
+
+#record the parameters for the variables(items)
+Coefficients_Ordering1F<- coef(MIRT_Mode_Median_OneFactor_MCEM, simplify = TRUE)
+Coefficients_Ordering1F_DF<- as.data.frame(Coefficients_Ordering1F$items)
+```
+
+#Understanding the 4 Factor Model 
+We have decided that the 4 factor model is the best fit of the data based on porportion of variance and the AIC and BIC fit measures. Now we will rotate the factors to determine if those help with interpretation. 
+```{r Plot Factor Loadings}
+#No rotations
+MIRT_Loadings_Unrotated_FourFactors <- summary(MIRT_Mode_Median_FourFactor_MCEM, rotate = "none")
+MIRT_Loadings_Unrotated <- as.data.frame(MIRT_Loadings_Unrotated_FourFactors$rotF)
+FourFactor_Rownames  <- rownames(MIRT_Loadings_Unrotated_FourFactors$rotF)
+FourFactor_Rownames <- as.character(FourFactor_Rownames)
+
+#Varimax - rotates the factors but keeps them orthogonal and uncorrelated
+MIRT_Loadings_Varimax_FourFactors <- summary(MIRT_Mode_Median_FourFactor_MCEM, rotate = "varimax")
+#Rotated SS loadings:  26.858 24.832 45.336 19.116 
+MIRT_Loadings_Varimax <- as.data.frame(MIRT_Loadings_Varimax_FourFactors$rotF)
+MIRT_Communalities_Varimax <- as.data.frame(MIRT_Loadings_Varimax_FourFactors$h2)
+FourFactor_Rownames  <- rownames(MIRT_Loadings_Varimax_FourFactors$rotF)
+FourFactor_Rownames <- as.character(FourFactor_Rownames)
+
+#Oblmin - rotation allows the factors to be correlated
+MIRT_Loadings_Oblimin_FourFactors <- summary(MIRT_Mode_Median_FourFactor_MCEM, rotate = "oblimin")
+MIRT_Loadings_Oblimin <- as.data.frame(MIRT_Loadings_Oblimin_FourFactors$rotF)
+FourFactor_Rownames  <- rownames(MIRT_Loadings_Oblimin_FourFactors$rotF)
+FourFactor_Rownames <- as.character(FourFactor_Rownames)
+
+plot(MIRT_Loadings_Unrotated$F1, MIRT_Loadings_Unrotated$F2, main = "Unrotated")
+plot(MIRT_Loadings_Varimax$F1, MIRT_Loadings_Varimax$F2, main = "Varimax")
+plot(MIRT_Loadings_Oblimin$F1, MIRT_Loadings_Oblimin$F2,  main = "Oblimin")
+```
+
+```{r Plot of Varimax Factor Loadings}
+plot(MIRT_Loadings_Varimax$F1, type = "l", main = "PC1 - Varimax")
+abline(h=0.5, col="red")
+abline(h=-0.5, col="red")
+abline(h=0.6, col="grey")
+abline(h=-0.6, col="grey")
+abline(h=0.4, col="blue")
+abline(h=-0.4, col="blue")
+
+plot(MIRT_Loadings_Varimax$F2, type = "l", main = "PC2 - Varimax")
+abline(h=0.5, col="red")
+abline(h=-0.5, col="red")
+abline(h=0.6, col="grey")
+abline(h=-0.6, col="grey")
+abline(h=0.4, col="blue")
+abline(h=-0.4, col="blue")
+
+plot(MIRT_Loadings_Varimax$F3, type = "l", main = "PC3 - Varimax")
+abline(h=0.5, col="red")
+abline(h=-0.5, col="red")
+abline(h=0.6, col="grey")
+abline(h=-0.6, col="grey")
+abline(h=0.4, col="blue")
+abline(h=-0.4, col="blue")
+
+plot(MIRT_Loadings_Varimax$F4, type = "l", main = "PC4 - Varimax")
+abline(h=0.5, col="red")
+abline(h=-0.5, col="red")
+abline(h=0.6, col="grey")
+abline(h=-0.6, col="grey")
+abline(h=0.4, col="blue")
+abline(h=-0.4, col="blue")
+```
+
+```{r Cleaning Factor Loadings}
+MIRT_Loadings_Varimax <- apply(MIRT_Loadings_Varimax,2,as.numeric)
+rownames(MIRT_Loadings_Varimax)<- FourFactor_Rownames
+MIRT_Loadings_Varimax[abs(MIRT_Loadings_Varimax) < 0.4] = NA
+MIRT_Loadings_Varimax_Cleaned <- MIRT_Loadings_Varimax[rowSums(is.na(MIRT_Loadings_Varimax))!= 3, ]
+#write.csv(MIRT_Loadings_Varimax_Cleaned, "MIRT_Loadings_Varimax.csv")
+MIRT_Loadings_Varimax_Cleaned <- as.data.frame(MIRT_Loadings_Varimax_Cleaned)
+```
+
+```{r Merge Data with Country Names}
+#High-dimensional models factor scores should use quasi-Monte Carlo integration. Pass QMC=TRUE
+MIRT_Scores_Varimax_FourFactors<- fscores(MIRT_Mode_Median_FourFactor_MCEM, rotate="varimax", 
+                                         method = "MAP", full.scores = TRUE, full.scores.SE = TRUE, QMC = TRUE)
+Reliability <- empirical_rxx(MIRT_Scores_Varimax_FourFactors)
+#       F1        F2        F3        F4 
+#0.9879444 0.9652061 0.9643217 0.9617517 
+
+rownames(MIRT_Scores_Varimax_FourFactors) <- Countries
+
+#Country_Names <-read.csv("Country_Code_Names.csv")
+#Country_Names <-Country_Names[,c("Country.Code", "Country.Title")]
+Named_MIRT_Data <- merge(Country_Names, MIRT_Scores_Varimax_FourFactors, by.y= 0, by.x ="Country.Code", all.y=T)
+#write.csv(Named_MIRT_Data, "MIRT_Scores_Unrotated_ThreeFactors_Named.csv")
+```
+
+Distribution of scores for all four factors 
+Numerical scale for use in linear regression
+```{r}
+hist(Named_MIRT_Data$F1)
+hist(Named_MIRT_Data$F2)
+hist(Named_MIRT_Data$F3)
+hist(Named_MIRT_Data$F4)
+```
+
+```{r Adding Variable Interpretation, eval = FALSE}
+#Add variable descriptions to 188 varaibles in Mean/median data frame.
+Descriptions <- read.csv("Codebook.csv")
+rownames(Descriptions) <- Descriptions$VAR
+Codebook_AddDescriptions<- Descriptions[c(colnames(Individual_MIRTData)),]
+
+Itemtype_Order <- read.csv("Coefficients_Ordering3F_DF_ItemType.csv")
+Itemtype_Order <- as.data.frame(Itemtype_Order[ ,c(1,15:17)])
+Items <- Itemtype_Order[1]
+
+#find the range of codes used on the Imputed_Mode_Median_Data
+Minimum_Code <- as.data.frame(apply(Imputed_Mode_Median_Data, 2, min))
+rownames(Minimum_Code) = Items$ï..Item
+Maximum_Code <- as.data.frame(apply(Imputed_Mode_Median_Data, 2, max))
+rownames(Maximum_Code) = Items$ï..Item
+Min_Max <- cbind(Minimum_Code, Maximum_Code)
+colnames(Min_Max) <- c("Minimum", "Maximum")
+
+#Mergeing by variable names - need to check that all are the same.
+Codebook_AddDescriptions<- merge(Codebook_AddDescriptions, Min_Max, by.x = 0, by.y=0, all.x=TRUE, sort = FALSE)
+
+Codebook_AddDescriptions<- merge(Codebook_AddDescriptions, Itemtype_Order, by.x = "Row.names", by.y="ï..Item", 
+                                 all.x=TRUE, sort = FALSE)
+
+#add the category ordereing parameters (ak_)
+#write.csv(Coefficients_Ordering4F_DF, "Coefficients_Ordering4F_DF_Rename.csv")
+Coefficients_Ordering4F_DF_Rename <- read.csv("Coefficients_Ordering4F_DF_Rename.csv")
+Codebook_AddDescriptions<- merge(Codebook_AddDescriptions,       
+                                 Coefficients_Ordering4F_DF_Rename[,c(1,6,7,8,15,17,19,20,23,25,26,12)],
+                                 all.x = TRUE, by.x = "Row.names", by.y = "Variable", sort = FALSE)
+#merge with loadings 
+#write.csv(MIRT_Loadings_Varimax, "MIRT_Loadings_Varimax_Rename.csv")
+MIRT_Loadings_Varimax <- read.csv("MIRT_Loadings_Varimax_Rename.csv")
+Loadings_VariableDescriptions <- merge(Codebook_AddDescriptions, MIRT_Loadings_Varimax, by.x="Row.names", by.y="Variable",
+                                       all.x = TRUE, sort = FALSE)
+
+#now need to add themes to this dataframe (theme interpretation is dependent on how the variable loads onto the factor)
+write.csv(Loadings_VariableDescriptions,"Imputed_Mode_Median_Data_AddInterpretations.csv")
+
+#This dataframe will include variable descriptions and theme interpretation. 
+#Loadings_ThemeDescriptions <- read.csv("Imputed_Mode_Median_Data_ThemeDescriptions.csv")
+```
+
+#Comparison with Hofstede Data
+```{r Compare with Hofstede Data, warning=FALSE}
+Hofstede <- read.csv("HofstedeDimensions.csv")
+Named_MIRT_Data_Hofstede <- merge(Named_MIRT_Data, Hofstede, by.x = "Country.Title", by.y="country")
+Named_MIRT_Data_Hofstede <- as.data.frame(apply(Named_MIRT_Data_Hofstede, 2, as.numeric))
+Named_MIRT_Data_Hofstede <- na.omit(Named_MIRT_Data_Hofstede[,c(2:6,12:17)])
+Named_MIRT_Data_Hofstede <- Named_MIRT_Data_Hofstede[,c(2:11)]
+#Hofstede_Correlations <- lm(F2 ~ . , data=Named_MIRT_Data_Hofstede, na.action=na.omit)
+#summary(Hofstede_Correlations)
+#round(cor(Named_MIRT_Data_Hofstede),4)
+#cor.test(Named_MIRT_Data_Hofstede$F1, Named_MIRT_Data_Hofstede$pdi)
+
+#Correlation Test between factors and hofstede's dimensions
+rcorr(as.matrix(Named_MIRT_Data_Hofstede))
+```
+
+#Combining WVS with Renewable Energy Data  
+
+##Renewable Generation Data 
+The world bank collects the amount of renewable electricity is produced by a country in a given year. However, the available data is from a variety of years; however, I will only focus on production from 2013-2014. The code below creates a single list of countries with the most recent (either 2013 or 2014) renewable electricity generation. We then merge those valuse with the country codes and names. 
+```{r Renewable_merge}
+Renewable_Generation <- read.csv("RE_excludeHydro.csv")
+Hydro_Generation <- read.csv("RE_includeHydro.csv")
+
+#Not all of the countries have data for 2014, so I want to make a dataframe with a single most recent renewable generation as a percentage of their total production (excluding hydro)
+Renewable_Generation_Most_Recent <- data.frame()
+r <- 0
+
+for(i in 1:263){
+ if(is.na(Renewable_Generation$X2014[i])){
+  #what to do if it is true
+   (r <- Renewable_Generation$X2013[i])
+}else {
+  #what to do if it is false (i.e. 2014 is not NA)
+  (r <- Renewable_Generation$X2014[i])
+  }
+ #print(r)
+ Renewable_Generation_Most_Recent <- rbind(Renewable_Generation_Most_Recent, r)
+}
+#Now we make a named most recent renewable energy dataframe.
+#Renewable_Generation_Most_Recent <- as.numeric(Renewable_Generation_Most_Recent)
+Renewable_Generation_Most_Recent <-data.frame(Renewable_Generation_Most_Recent, Renewable_Generation[,1]) 
+#do not make into a matrix otherwise will not merge with map below
+colnames(Renewable_Generation_Most_Recent) <- c("RE_Generation", "Country.Name")
+
+Renewable_Generation_Most_Recent <- merge(Renewable_Generation_Most_Recent, Hydro_Generation, 
+                                          by.x = "Country.Name", by.y = "Country.Name")
+
+Renewable_merge <-merge(Renewable_Generation_Most_Recent, Country_Names, 
+                                   by.x="Country.Name", by.y="Country.Title")
+Renewable_merge <- Renewable_merge[,c(-3)]
+```
+
+Let's visualize the renewable electiricty data in order to get a sense for it's distribution and scale.
+We can see fromt the plot below that there are a considerable amount of very small values in the data set. In fact, in the histogram we can see that the data is skewwed to the left. A transformation of this data will be neccessary if we want to study linear relationships. 
+
+```{r Renwable Energy Data Scatterplot}
+plot(Renewable_merge$Hyrdo2014, xlim = c(0,60), ylim= c(0,30))
+grid(30,30)
+```
+
+```{r Renewable Energy Data Histogram}
+hist(Renewable_merge$Hyrdo2014, breaks = c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100))
+```
+I decided to transform the data using a log transformation. I added one because of the multiple zeros in the data set and did want negative infinity in the resulting data set. In the transformed data set we can see that they data now ranges from 0 to 3. While the data is still not normal, there is considerably less skew. 
+
+#Combining Dimensions with Renewable Energy Data  - Merge RE and MIRT Data
+Now that we have established princible components with country component scorse based on the majority of the WVS Survey questions in Wave 6, we can merge the renewable electricity data and the component scores by country. Unfortunatetly, 3 countries (Rwanda, Palestine, and Taiwan) are dropped from the analysis because they do not have renewable electricty data.
+```{r MIRT and Renewable Data}
+Renewable_Scores <- merge(Renewable_merge, Named_MIRT_Data,
+                                   by.x="Country.Name", by.y="Country.Title")
+Renewable_Scores <- Renewable_Scores[,c(1:7, 11:16)]
+Renewable_Scores <- na.omit(Renewable_Scores)
+#write.csv(Renewable_Scores, file = "Renewable_Scores.csv")
+```
+
+#Different Set of RE Generation Data (50 countries)
+International_data																																						
+https://www.eia.gov/beta/international/data/browser/#/?pa=00000000000000000000007o3000008&c=ruvvvvvfvtvvvv1vvvvvvfvvvvvvfvvvsu20evvvvvvvvvvvvuvg&ct=0&tl_id=2-A&vs=INTL.34-12-AFG-BKWH.A&cy=2015&vo=0&v=H&end=2015&s=INTL.34-12-ZWE-BKWH.A~~INTL.34-12-ESH-BKWH.A																																						
+Fri Mar 09 2018 12:20:04 GMT+0100 (W. Europe Standard Time)																																						
+Source: U.S. Energy Information Administration
+```{r}
+EIA_Exclude_Hydro <- read.csv("International_data_ExcludeHydro.csv")
+EIA_Countries <- as.character(EIA_Exclude_Hydro$Country)
+EIARenewable_Scores <- merge(EIA_Exclude_Hydro, Named_MIRT_Data,
+                                   by.x="Country", by.y="Country.Title")
+
+options(show.signif.stars=TRUE)
+fullregression <- lm(as.numeric(EIARenewable_Scores$X2014) ~ EIARenewable_Scores$F1 + 
+                       EIARenewable_Scores$F2 + 
+                       EIARenewable_Scores$F3 + EIARenewable_Scores$F4)
+summary(fullregression)
+```
+
+#Final Data for Regression
+This is the dataframe we will use to explore the relationships between renewable electricity production and cultural values. 
+```{r MIRT Regression Dataframe}
+Final_Data <- Renewable_Scores
+options(scipen=999)
+```
+
+#Linear Regression
+We will start by testing a linear regression with all 5 principle components and no control, moderator, or mediator variables
+```{r MIRT Regression - Renewable}
+fullregression <- lm(log(Final_Data$RE_Generation +1) ~ Final_Data$F1 + Final_Data$F2 + 
+                      Final_Data$F3 + Final_Data$F4)
+summary(fullregression)
+```
+
+
+```{r MIRT Regression - Hydro}
+fullregression <- lm(Final_Data$Hyrdo2014 ~ Final_Data$F1 + Final_Data$F2 + 
+                      Final_Data$F3 + Final_Data$F4)
+summary(fullregression)
+```
+
+#Controlling for GDP
+There are many variabales associated with the contruction on new infrastructure. The availability of funds to build the infrastructure being a major factor. Therefore, in our regression models we will control for GDP. One country does not have a 2015 GDP values, bringing us down to 53 countries.
+```{r MIRT - GDP Control Data, warning=FALSE}
+GDP_rawdata <- read.csv("World_Bank_GDP_Data.csv")
+GDP_Years <- GDP_rawdata[4,]
+
+#remove first 4 rows to bring column headers to top
+GDP_data <- GDP_rawdata[c(5:286),]
+colnames(GDP_data) <- GDP_Years
+
+#remove all columns except for country names, and 2015 GDP
+GDP_data2014 <-GDP_data[,c(1,59)]
+colnames(GDP_data2014)<- c("Country.Title", "2014 GDP")
+
+GDP_data_named<-merge(GDP_data2014, Country_Names, by.x= "Country.Title", by.y = "Country.Title")
+GDP_Control <- merge(GDP_data_named, Final_Data, by.x = "Country.Title", by.y= "Country.Name")
+Control <- GDP_Control$`2014 GDP`/10^9 #down to 53 countries
+```
+
+```{r MIRT Regression with GDP Control}
+fullregression <- lm(Final_Data$RE_Generation ~ Final_Data$F1 + Final_Data$F2 + Final_Data$F3 + Final_Data$F4 + Control)
+summary(fullregression)
+```
+
+#Other Controls
+```{r MIRT Other Controls Data, warning=FALSE}
+#Renewable_Resources <- read.csv("Renewable_Resources.csv") #My regional estimates
+SolutionsProjectModel<-read.csv("SolutionsProjectModel.csv") #
+
+Renewable_Resources<- merge(SolutionsProjectModel, Final_Data, by.x = "country", by.y = "Country.Name")
+Renewable_Resources <- merge(GDP_data_named, Renewable_Resources, by.x = "Country.Title", by.y= "country")
+
+Renewable_Gen<- Renewable_Resources$RE_Generation
+F1 <- Renewable_Resources$F1
+F2 <- Renewable_Resources$F2
+F3 <- Renewable_Resources$F3
+F4 <- Renewable_Resources$F4
+
+Wind_Onshore<- Renewable_Resources$Onshore.wind
+Wind_Offshore <- Renewable_Resources$Offshore.wind
+Solar_PV <- Renewable_Resources$Solar.PV.plant
+Solar_PV_Residential <- Renewable_Resources$Res..roof.PV.system
+Solar_PV_Commercial <- Renewable_Resources$Com.gov.Indus.roof.PV.system
+Solar_CSP <- Renewable_Resources$CSP.plant
+Geothermal <- Renewable_Resources$Geothermal.electric.plant
+Tidal <- Renewable_Resources$Tidal.turbine
+Renewable_Resource <- Renewable_Resources$Sum.excludeHydro.
+GDP <- Renewable_Resources$`2014 GDP`
+
+#Policy <- Renewable_Resources$Policy.Target # this was created by divided the national renewable target by the number of years the country gave themselves to get there.
+```
+
+```{r Generation vs Resource}
+fullregression_resources <- lm(Renewable_Gen ~ Wind_Onshore + Wind_Offshore+
+                                 Solar_PV + Solar_PV_Residential + Solar_PV_Commercial 
+                               + Solar_CSP + Geothermal + Tidal)
+summary(fullregression_resources)
+```
+
+```{r MIRT Regression with Additional Controls}
+fullregression_resources <- lm(Renewable_Gen ~ F1 + F2 + F3 + F4 +
+                                 Wind_Onshore + Wind_Offshore+
+                                 Solar_PV + Solar_PV_Residential + Solar_PV_Commercial + Solar_CSP + 
+                                 Geothermal + 
+                                 Tidal+
+                                 GDP)
+summary(fullregression_resources)
+```
+
+```{r}
+fullregression_resources <- lm(Renewable_Gen ~ F1 + F2 + F3 + F4 + Renewable_Resource + GDP)
+summary(fullregression_resources)
+```
+#Comparison with Installed Wind Generation
+Data Source:
+https://www.eia.gov/beta/international/data/browser/#/?pa=00000000000000000000000g0000008&c=ruvvvvvfvtvvvv1vvvvvvfvvvvvvfvvvsu20evvvvvvvvvvvvuvg&ct=0&tl_id=2-A&vs=INTL.34-12-AFG-BKWH.A&cy=2015&vo=0&v=H&end=2015
+Fri Mar 09 2018 12:14:14 GMT+0100 (W. Europe Standard Time)
+Source: U.S. Energy Information Administration
+
+First, I compare the installed with the wind resouce. 
+```{r}
+Wind_Production <- read.csv("International_Data.csv")
+Wind <- merge(Wind_Production, SolutionsProjectModel, by.x = "Country", by.y = "country")
+Wind_Installed <- as.numeric(Wind$X2014)
+
+Wind_Model <- lm(Wind_Installed ~ Wind$Onshore.wind + Wind$Offshore.wind)
+summary(Wind_Model)
+```
+
+#Factor Relationship with Wind Installations
+Now let's see if the factors retain any linear relationships with just the installation of wind at a global level.
+```{r}
+Wind_Scores <- merge(Wind, Named_MIRT_Data,
+                                   by.x="Country", by.y="Country.Title")
+
+Wind_Scores <- merge(GDP_data_named, Wind_Scores, by.x = "Country.Title", by.y= "Country")
+
+Wind_Installed <- as.numeric(Wind_Scores$X2014)
+Wind_Offshore <- Wind_Scores$Offshore.wind
+Wind_Onshore <- Wind_Scores$Onshore.wind
+F1 <- Wind_Scores$F1
+F2 <- Wind_Scores$F2
+F3 <- Wind_Scores$F3
+F4 <- Wind_Scores$F4
+GDP <- Wind_Scores$`2014 GDP`
+
+
+fullregression_resources <- lm(Wind_Installed ~ F1 + F2 + F3 + F4 +
+                                 Wind_Offshore + Wind_Onshore + GDP)
+
+summary(fullregression_resources)
+```
+
+#Check with the Sanitation Data
+ONLY 13 COUNTRIES IN THIS DATA SET
+```{r}
+Sanitation_Data <- read.csv("Sanitation Data.csv")
+Sanitation_Development<- merge(Sanitation_Data, Final_Data, by.x = "Nation", by.y = "Country.Name")
+
+F1 <- Sanitation_Development$F1
+F2 <- Sanitation_Development$F2
+F3 <- Sanitation_Development$F3
+F4 <- Sanitation_Development$F4
+Sewer_Connection <- Sanitation_Development$X..Change.in.National.Sewer.Connection.CoverageB
+Sewer_Treatment <- Sanitation_Development$X..Change.in.National.Sewerage.Treatment.CoverageB
+Onsite <- Sanitation_Development$X..Change.in.National.Onsite.Sanitation.CoverageC
+Sanitation_Coverage1990 <- Sanitation_Development$X..Improved.Sanitation.Coverage..1990E
+PerCapitaGDP <- Sanitation_Development$Change.in.Per.Capita.GDP..USDD
+ChangeinPopulation <- Sanitation_Development$Change.in...Urban.PopulationF
+```
+
+```{r Sewer Connection}
+Sewer_Model <- lm(Sewer_Connection ~ F1 + F2 + F3 + F4 + PerCapitaGDP + ChangeinPopulation + Sanitation_Coverage1990)
+summary(Sewer_Model)
+```
+
+```{r Sewer Treatment}
+Treatment_Model <- lm(Sewer_Treatment ~ F1 + F2 + F3 + F4 + PerCapitaGDP + ChangeinPopulation + Sanitation_Coverage1990)
+summary(Treatment_Model)
+```
+
+```{r Onsite Model}
+Onsite_Model <- lm(Onsite ~ F1 + F2 + F3 + PerCapitaGDP + ChangeinPopulation + Sanitation_Coverage1990)
+summary(Onsite_Model)
+```
+
+#Linear Regression with Wind Cost Overrun Data
+Now we are going to test the relationship of the factors with cost overrun data collected by Sovacool et al. in 2017 (http://onlinelibrary.wiley.com/doi/10.1002/we.2069/abstract) 
+```{r MIRT Regression with Wind Cost Overrun}
+Cost_Overruns <- read.csv("Wind_Cost_Overrun_Data.csv")
+Cost_Overruns<- merge(Cost_Overruns, Country_Names, by.x = "Country", by.y = "Country.Title") #27 projects, from 8 countries
+Cost_Overrun_Resource <- merge(Cost_Overruns, Wind, by.x ="Country", by.y = "Country", all.x = TRUE)
+
+
+#Lose 4 projects because Denmark was not in WVS
+Cost_Overrun_Resource_Factors<- merge(Cost_Overrun_Resource , Named_MIRT_Data, 
+                                         by.x ="Country", by.y = "Country.Title")
+
+Cost_Overrun <- Cost_Overrun_Resource_Factors$X.Cost.Over.Run.2017
+Country <- as.factor(Cost_Overrun_Resource_Factors$Country)
+F1 <- Cost_Overrun_Resource_Factors$F1
+F2 <- Cost_Overrun_Resource_Factors$F2
+F3 <- Cost_Overrun_Resource_Factors$F3
+F4 <- Cost_Overrun_Resource_Factors$F4
+Wind_Onshore <- Cost_Overrun_Resource_Factors$Onshore.wind
+Wind_Offshore <- Cost_Overrun_Resource_Factors$Offshore.wind
+Project_Type <- as.factor(Cost_Overrun_Resource_Factors$Offshore) #binary variable indicating an offshore or onshore
+```
+
+First to show that project type matters
+```{r}
+fullregression <- lm(Cost_Overrun ~ Project_Type)
+summary(fullregression)
+```
+
+#Exploring Relationship of Cost Overrun to Factors
+NOTE: Only 7 countries involved.
+```{r Wind Cost Overrun vs Project Type and Country}
+fullregression <- lm(Cost_Overrun ~ Project_Type + Country)
+summary(fullregression)
+```
+
+##Comparison of Cost Overrun to Factors controlling for Project Type
+NOTE: Only 7 countries
+```{r}
+fullregression <- lm(Cost_Overrun ~ Project_Type + F1 + F2 + F3 + F4)
+summary(fullregression)
+```
+#IRENA Cost Data
+Levelized cost of electricity produced by wind from 7 countries with cost divided by year 2010-2014
+```{r}
+LCOE <- read.csv("LCOE_IRENA.csv")
+
+LCOE_Model_Data <- merge(LCOE, Named_MIRT_Data , by.x = "Country", by.y ="Country.Title")
+
+fullregression <- lm(LCOE_Model_Data$LCOE ~ LCOE_Model_Data$F1 + LCOE_Model_Data$F2 + LCOE_Model_Data$F3 +
+                       LCOE_Model_Data$F4 + as.factor(LCOE_Model_Data$Year)-1)
+summary(fullregression)
+```
+
+
+```{r}
+#install.packages("plm")
+library("plm") 
+
+LCOE_Panel<- pdata.frame(LCOE_Model_Data , index=c("Country","Year"))
+
+#Pooled Model
+LCOE.pooled <- plm(LCOE ~ F1 + F2 + F3 + F4, model="pooling", data=LCOE_Panel)
+summary(LCOE.pooled)
+
+#Fixed Effects Model (annot run because cultural factors are time invariant)
+#LCOE.within <- plm(LCOE ~ F1 + F2 + F3, data=LCOE_Panel, model="within")
+#summary(LCOE.within)
+#pFtest(LCOE.within, LCOE.pooled)
+
+plmtest(LCOE.pooled, effect="individual")
+# fail to reject the null hypothesis of zero variance in individual-specific errors; therefore, heterogeneity among individuals may not be significant.
+```
+```{r}
+LCOE_Panel_Control<- merge(GDP_data_named, LCOE_Model_Data, by.x = "Country.Title", by.y= "Country")
+LCOE_Panel_Control<- merge(SolutionsProjectModel, LCOE_Panel_Control, by.x = "country", by.y = "Country.Title")
+LCOE_Panel_Control<- pdata.frame(LCOE_Panel_Control, index=c("country","Year"))
+
+GDP <- LCOE_Panel_Control$`2014 GDP`
+
+#Pooled Model
+LCOE.pooled <- plm(LCOE ~ F1 + F2 + F3 + Onshore.wind + GDP , 
+                   model="pooling", data=LCOE_Panel_Control)
+summary(LCOE.pooled)
+
+#Fixed Effects Model (annot run because cultural factors are time invariant)
+#LCOE.within <- plm(LCOE ~ F1 + F2 + F3, data=LCOE_Panel, model="within")
+#summary(LCOE.within)
+#pFtest(LCOE.within, LCOE.pooled)
+
+plmtest(LCOE.pooled, effect="individual")
+# fail to reject the null hypothesis of zero variance in individual-specific errors; therefore, heterogeneity among individuals may not be significant.
+```
+
+#Model Validation
+
+Finally lets look at a few individual countries and determine if the model is also apparent at the aggregate level.
+We will test: Sweden, U.S., Brazil, China, and Egypt
+```{r Divide by Country}
+#Divide the data sets by country
+
+V258.x <- Individual_Data$V258.x
+#write.csv(V258.x, "Weight_Vector.csv")
+
+Individual_MIRTData<- cbind(Nominal_Individual_Data[,c(1:24)], 
+                            Dichotomous_Individual_Data[,c(3:38)], Ordered_Individual_Data[,c(3:157)])
+Split_IndividualData <- split(Individual_MIRTData, Individual_MIRTData$V2.x)
+```
+
+```{r Algeria, eval=FALSE}
+Algeria <- as.data.frame(Split_IndividualData$"12")
+Algeria_MIRT <- Algeria[,c(3:215)]
+
+#estimate the missing data so that the model will run
+init = mice(Algeria_MIRT, maxit=0) 
+meth = init$method
+predM = init$predictorMatrix
+
+set.seed(103)
+Algeria_MIRT_imputed = mice(Algeria_MIRT, method=meth, predictorMatrix=predM, m=5, printFlag = FALSE)
+#Create a new data set with the imputed data
+Algeria_MIRT_imputed<- complete(Algeria_MIRT_imputed)
+Algeria_MIRT_imputed <- Algeria_MIRT_imputed[,colnames(Algeria_MIRT)]
+
+#model still will not run - could be to lack of variety in responses in some questions, 
+#Removed question V46 and V206 because they did not answer it
+#Removed question V148 because everyone answered 1
+
+Algeria_MIRT_Subset <- Algeria_MIRT_imputed[,c("V161", "V162","V163",
+                                               "V5","V6","V7","V8","V9","V10","V11",
+                                               "V70","V71","V72","V73","V75","V76","V77",
+                                               "V78","V79","V74","V165","V166","V167","V168",
+                                               "V169","V45","V49","V54","V51","V52","V50",
+                                               "V48","V47","V53","V67","V68","V69","V84","V85",
+                                               "V86","V87","V88","V89","V108","V109",
+                                               "V110","V111","V112","V113","V114","V115",
+                                               "V116","V117","V118","V119","V120","V121","V122",
+                                               "V123","V124","V126","V127","V128",
+                                               "V129","V130","V142","V225","V226","V227",
+                                               "V217","V218","V223","V224","V219","V220",
+                                               "V221","V222","V143","V145","V146","V153",
+                                               "V154","V155","V156","V211","V103","V104","V105",
+                                               "V106","V107","V212","V213","V214","V216",
+                                               "V170","V171","V172","V173","V174",   "V175","V181","V182","V183","V184","V185","V186","V188","V189","V190","V191","V23","V56","V55","V157","V158","V159","V160",
+"V164","V59","V95","V96","V97","V98","V99","V100","V101","V131","V132","V134","V135","V136","V137","V138","V141","V192","V194",   "V197","V198","V200","V209","V210","V199","V201","V202","V203","V204","V205","V207","V208","V195","V196",  
+
+"V25","V61","V62","V63","V64","V65","V80","V81","V147","V150","V151",
+
+"V13","V14","V15","V16","V17","V18","V19","V20","V21","V22",
+"V24","V37","V38","V39","V40","V41","V42","V43", 
+"V66","V149","V176","V177","V187")]
+
+
+#still will not run, try looking at frequency distributions
+freq12=table(col(Algeria_MIRT_Subset), as.matrix(Algeria_MIRT_Subset))
+Names12=colnames(Algeria_MIRT_Subset)  # create list of names
+data12=data.frame(cbind(freq12),Names12)   # combine them into a data frame
+data12=data12[,c(12,1,2,3,4,5,6,7,8,9,10,11)] # sort columns
+
+Algeria_Categories <- apply(Algeria_MIRT_Subset,2,unique)
+
+#ItemTypes likely changed from Mode to Individual Levels and there were several variables removed because they were the same across all the countries.
+itemTC <- rep("gpcm", 185)
+itemTC[c(152:162)] <- "nominal"
+itemTC[c(163:185)] <- "2PL"
+
+Algeria_MIRT_Model <- mirt(Algeria_MIRT_Subset, 4, itemtype=itemTC, method = "MHRM", large = TRUE)
+Algeria_MIRT_Model1<- mirt(Algeria_MIRT_Subset, 4, itemtype=itemTC, method = "MCEM")
+
+Algeria_MIRT_Summary <- summary(Algeria_MIRT_Model1, rotate="varimax")
+Algeria_Varimax_Loadings <- Algeria_MIRT_Summary$rotF
+Algeria_MIRT_Scores <- fscores(Algeria_MIRT_Model1, full.scores = T, full.scores.SE = T, 
+                               rotate = "varimax", QMC=TRUE)
+empirical_rxx( Algeria_MIRT_Scores)
+```
